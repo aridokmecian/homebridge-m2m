@@ -1,12 +1,9 @@
 {
   "compilerOptions": {
-    "target": "ES2018",
+    "target": "ES2022",
     "module": "commonjs",
     "lib": [
-      "ES2015",
-      "ES2016",
-      "ES2017",
-      "ES2018"
+      "ES2022"
     ],
     "sourceMap": true,
     "rootDir": "src",
@@ -14,7 +11,8 @@
 
     "strict": true,
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
   },
   "include": [
     "src"

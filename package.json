@@ -1,7 +1,7 @@
 {
-  "name": "homebridge-rcontrol",
+  "name": "homebridge-m2m",
   "version": "0.0.2",
-  "displayName": "Homebridge RControl",
+  "displayName": "Homebridge M2M",
   "description": "🚨 RControl Alarm System Plugin for Homebridge",
   "main": "dist/accessory.js",
   "scripts": {
@@ -12,34 +12,37 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "watch": "npm run build && npm link && nodemon"
   },
-  "author": "Andrew Abosh",
+  "author": "Ari Dokmecian",
   "engines": {
-    "homebridge": ">=1.0.0"
+    "node": "^22 || ^24 || ^26",
+    "homebridge": ">=2.0.0"
   },
   "keywords": [
     "homebridge-plugin",
     "homebridge",
     "rcontrol",
+    "m2m",
     "alarm",
+    "DSC Connect",
     "security system"
   ],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git://github.com/aabosh/homebridge-rcontrol.git"
+    "url": "git+https://github.com/aridokmecian/homebridge-m2m.git"
   },
   "bugs": {
-    "url": "https://github.com/aabosh/homebridge-rcontrol/issues"
+    "url": "https://github.com/aridokmecian/homebridge-m2m/issues"
   },
   "devDependencies": {
-    "@types/node": "^14.14.16",
-    "@types/node-fetch": "^2.5.7",
-    "homebridge": "^1.1.7",
-    "nodemon": "^2.0.6",
-    "rimraf": "^3.0.2",
-    "typescript": "^4.1.3"
+    "@types/node": "^26.4.1",
+    "@types/node-fetch": "^2.6.13",
+    "homebridge": "^2.4.0",
+    "nodemon": "^3.1.14",
+    "rimraf": "^6.1.3",
+    "typescript": "^7.0.2"
   },
   "dependencies": {
-    "node-fetch": "^2.6.1"
+    "node-fetch": "^2.7.0"
   }
 }

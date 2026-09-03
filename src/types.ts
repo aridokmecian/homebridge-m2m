@@ -58,7 +58,7 @@ export interface GetUserSettingsPostResponse {
 }
 
 interface ExternalDevice {
-    DeviceState: number,
+    DeviceState: DeviceState,
     DevicePIN: number,
     PartitionNumber: string
 }
@@ -74,8 +74,24 @@ export interface GetAllDeviceDataPostResponse {
     }
 }
 
+export interface UpdateArmStatusPostResponse {
+    ErrorCode: number,
+    ErrorString: string,
+    Success: boolean
+}
+
+// ArmingState codes expected by POST /api/v3/remotearm (the command we send), confirmed via a
+// live capture of the iOS app's traffic.
 export enum ServerAlarmState {
-    ARMING = -1,
+    DISARMED = 0,
     ARMED = 1,
-    DISARMED = 2
+    STAY = 2
+}
+
+// DeviceState codes returned by getalldevicedata (the panel's reported status), confirmed via a
+// live capture. This is a different numbering than ServerAlarmState above.
+export enum DeviceState {
+    AWAY_ARMED = 1,
+    DISARMED = 2,
+    STAY_ARMED = 3
 }
