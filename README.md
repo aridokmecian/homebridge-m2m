@@ -37,7 +37,9 @@ homebridge-m2m is a Homebridge **platform**, configured under `platforms` in `co
 
 > **Upgrading from an earlier version?** homebridge-m2m used to be a Homebridge **accessory**, configured under `accessories`. Move your existing block from `accessories` to `platforms` and rename its `accessory` field to `platform` (same field values otherwise). This is a one-time breaking change — see Notes for what else it affects.
 
-Set `enableZoneSensors: true` to also register a contact or motion sensor for each zone on the panel, polled for state changes every 10 seconds. Zone names and sensor types (contact vs. motion) are auto-discovered from the panel; no per-zone configuration is needed.
+Set `enableZoneSensors: true` to also register a contact or motion sensor for each zone on the panel, polled for state changes every 10 seconds by default (configurable under Advanced Settings). Zone names and sensor types (contact vs. motion) are auto-discovered from the panel; no per-zone configuration is needed.
+
+Panel IMEI, partition number, and the zone polling interval live under an **Advanced Settings** section in the Config UI, collapsed by default — most users won't need to touch them.
 
 ## Notes
 - Migrating from the old accessory-based config gives your panel a new HomeKit accessory identity (Homebridge platforms manage their own accessory IDs, separate from the old accessory-plugin ones) — you'll need to re-add it to any HomeKit rooms, scenes, or automations that referenced the old one.

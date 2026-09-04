@@ -4,7 +4,8 @@ export interface Options {
     password: string,
     imei?: string,
     partitionNumber?: string,
-    enableZoneSensors?: boolean
+    enableZoneSensors?: boolean,
+    pollingIntervalSeconds?: number
 }
 
 export interface CreateAuthCodePostResponse {

@@ -6,8 +6,11 @@ import { SecuritySystemAccessory } from "./securitySystemAccessory";
 import { ZoneAccessory } from "./zoneAccessory";
 import { normalizeZoneName, zoneServiceTypeForName } from "./zoneNaming";
 
-// The native app polls zone status roughly every 7s; 10s is safe and polite.
-const ZONE_POLL_INTERVAL_MS = 10000;
+// The native app polls zone status roughly every 7s; 10s is safe and polite, and is the default
+// exposed via the pollingIntervalSeconds config option.
+const DEFAULT_ZONE_POLL_INTERVAL_SECONDS = 10;
+// Matches the schema's minimum, enforced again here in case config.json was hand-edited past it.
+const MIN_ZONE_POLL_INTERVAL_SECONDS = 5;
 
 export class RControlPlatform implements DynamicPlatformPlugin {
 
@@ -40,7 +43,8 @@ export class RControlPlatform implements DynamicPlatformPlugin {
             password: config.password as string,
             imei: config.imei as string | undefined,
             partitionNumber: config.partitionNumber as string | undefined,
-            enableZoneSensors: config.enableZoneSensors as boolean | undefined
+            enableZoneSensors: config.enableZoneSensors as boolean | undefined,
+            pollingIntervalSeconds: config.pollingIntervalSeconds as number | undefined
         };
 
         this.api.on('didFinishLaunching', () => this.didFinishLaunching());
@@ -92,7 +96,9 @@ export class RControlPlatform implements DynamicPlatformPlugin {
         }
 
         await this.discoverAndRegisterZones(imeiUserNumber.IMEI, userSettings.HAUserSettings.ID);
-        this.zonePollInterval = setInterval(() => this.pollZoneStates(), ZONE_POLL_INTERVAL_MS);
+
+        const intervalSeconds = Math.max(MIN_ZONE_POLL_INTERVAL_SECONDS, this.config.pollingIntervalSeconds || DEFAULT_ZONE_POLL_INTERVAL_SECONDS);
+        this.zonePollInterval = setInterval(() => this.pollZoneStates(), intervalSeconds * 1000);
     }
 
     private registerSecuritySystemAccessory() {
