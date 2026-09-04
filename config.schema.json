@@ -1,6 +1,6 @@
 {
     "pluginAlias": "RControl",
-    "pluginType": "accessory",
+    "pluginType": "platform",
     "singular": false,
     "schema": {
         "type": "object",
@@ -34,6 +34,12 @@
                 "type": "string",
                 "required": false,
                 "description": "If your panel has more than one partition, the partition this accessory should control. Leave blank to use the first partition on the panel."
+            },
+            "enableZoneSensors": {
+                "title": "Enable Zone Sensors",
+                "type": "boolean",
+                "default": false,
+                "description": "Register each alarm zone as a HomeKit contact/motion sensor."
             }
         }
     },

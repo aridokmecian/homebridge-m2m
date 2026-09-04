@@ -1,39 +1,30 @@
-import { AccessoryConfig, AccessoryPlugin, API, CharacteristicEventTypes, CharacteristicGetCallback, CharacteristicSetCallback, CharacteristicValue, HAP, Logging, Service} from "homebridge";
+import { CharacteristicEventTypes, CharacteristicGetCallback, CharacteristicSetCallback, CharacteristicValue, HAP, Logging, PlatformAccessory } from "homebridge";
 import { ServerAlarmState, DeviceState, Options, GetUserSettingsPostResponse, GetAllDeviceDataPostResponse, AlarmIMEIUserNumber, ExternalDevice } from "./types";
 import { RControlAPI } from "./api";
 
-export = (api: API) => {
-    api.registerAccessory("RControl", RControl);
-};
-
-class RControl implements AccessoryPlugin {
+// The security panel accessory: arm/disarm state and HomeKit's SecuritySystem service. Wraps a
+// PlatformAccessory managed by RControlPlatform, rather than being a standalone AccessoryPlugin.
+export class SecuritySystemAccessory {
 
     private readonly logger: Logging;
     private readonly config: Options;
-    private readonly service: Service;
-    private readonly informationService: Service;
     private readonly hap: HAP;
-    private readonly rcontrolApi: RControlAPI
+    private readonly rcontrolApi: RControlAPI;
+    private readonly service;
 
     private lastUserSettingsResponse: GetUserSettingsPostResponse | undefined = undefined;
     private lastDeviceDataResponse: GetAllDeviceDataPostResponse | undefined = undefined;
     private targetState: CharacteristicValue | undefined = undefined;
     private lastKnownState: CharacteristicValue | undefined = undefined;
 
-    constructor(logger: Logging, config: AccessoryConfig, api: API) {
-        this.hap = api.hap;
+    constructor(accessory: PlatformAccessory, logger: Logging, config: Options, hap: HAP, rcontrolApi: RControlAPI) {
         this.logger = logger;
+        this.config = config;
+        this.hap = hap;
+        this.rcontrolApi = rcontrolApi;
 
-        this.config = {
-            name: config.name as string,
-            username: config.username as string,
-            password: config.password as string,
-            imei: config.imei as string | undefined,
-            partitionNumber: config.partitionNumber as string | undefined
-        };
-
-        this.service = new this.hap.Service.SecuritySystem(config.name);
-        this.rcontrolApi = new RControlAPI(logger);
+        this.service = accessory.getService(hap.Service.SecuritySystem) || accessory.addService(hap.Service.SecuritySystem, config.name);
+        accessory.getService(hap.Service.AccessoryInformation) || accessory.addService(hap.Service.AccessoryInformation);
 
         this.service.getCharacteristic(this.hap.Characteristic.SecuritySystemCurrentState)
             .on(CharacteristicEventTypes.GET, this.handleSecuritySystemCurrentStateGet.bind(this));
@@ -41,14 +32,6 @@ class RControl implements AccessoryPlugin {
         this.service.getCharacteristic(this.hap.Characteristic.SecuritySystemTargetState)
             .on(CharacteristicEventTypes.GET, this.handleSecuritySystemTargetStateGet.bind(this))
             .on(CharacteristicEventTypes.SET, this.handleSecuritySystemTargetStateSet.bind(this));
-
-        this.informationService = new this.hap.Service.AccessoryInformation();
-
-        if (!this.config.username || !this.config.password) {
-            this.logger.error("No RControl credentials provided.");
-        } else {
-            this.rcontrolApi.login(this.config.username, this.config.password);
-        }
     }
 
     handleSecuritySystemCurrentStateGet(callback: CharacteristicGetCallback) {
@@ -279,13 +262,6 @@ class RControl implements AccessoryPlugin {
             default:
                 return ServerAlarmState.ARMED;
         }
-    }
-
-    getServices(): Service[] {
-        return [
-            this.informationService,
-            this.service
-        ];
     }
 
 }

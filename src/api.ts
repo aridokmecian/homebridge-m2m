@@ -1,7 +1,7 @@
 import { Logging } from "homebridge";
 import fetch, { Headers } from "node-fetch";
 import { API_URL, API_URL_V3, AUTH_TOKEN_HEADER_NAME } from "./settings";
-import { CreateAuthCodePostResponse, CreateAccessTokenPostResponse, GetUserSettingsPostResponse, GetAllDeviceDataPostResponse, UpdateArmStatusPostResponse } from "./types";
+import { CreateAuthCodePostResponse, CreateAccessTokenPostResponse, GetUserSettingsPostResponse, GetAllDeviceDataPostResponse, GetAllDeviceDataV3PostResponse, GetDeviceStatusDataPostResponse, UpdateArmStatusPostResponse } from "./types";
 
 // RControl's server can take 15-40s to confirm an arm/disarm with the panel over its cellular
 // connection, but it occasionally drops the connection without ever responding. node-fetch has
@@ -114,6 +114,21 @@ export class RControlAPI {
         if (!this.ensureLoggedIn('remotearm')) return;
         const url = API_URL_V3 + 'remotearm';
         return this.request<UpdateArmStatusPostResponse>('remotearm', url, body);
+    }
+
+    // Used once at startup to discover zones and their names. Distinct from getAllDeviceData
+    // above: same endpoint name, but on v3 with a different request body and response shape (the
+    // v2 call used for panel state doesn't include zone data).
+    getAllDeviceDataV3 = async (body: Record<string, unknown>): Promise<GetAllDeviceDataV3PostResponse | undefined> => {
+        if (!this.ensureLoggedIn('getalldevicedata (v3)')) return;
+        const url = API_URL_V3 + 'getalldevicedata';
+        return this.request<GetAllDeviceDataV3PostResponse>('getalldevicedata (v3)', url, body);
+    }
+
+    getDeviceStatusData = async (body: Record<string, unknown>): Promise<GetDeviceStatusDataPostResponse | undefined> => {
+        if (!this.ensureLoggedIn('getdevicestatusdata')) return;
+        const url = API_URL_V3 + 'getdevicestatusdata';
+        return this.request<GetDeviceStatusDataPostResponse>('getdevicestatusdata', url, body);
     }
 
 }

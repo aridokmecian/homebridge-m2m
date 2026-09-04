@@ -3,7 +3,7 @@
   "version": "0.0.2",
   "displayName": "Homebridge M2M",
   "description": "🚨 RControl Alarm System Plugin for Homebridge",
-  "main": "dist/accessory.js",
+  "main": "dist/index.js",
   "scripts": {
     "clean": "rimraf ./dist",
     "build": "rimraf ./dist && tsc",
