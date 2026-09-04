@@ -1,7 +1,9 @@
 export interface Options {
     name: string,
     username: string,
-    password: string
+    password: string,
+    imei?: string,
+    partitionNumber?: string
 }
 
 export interface CreateAuthCodePostResponse {
@@ -21,7 +23,7 @@ export interface CreateAccessTokenPostResponse {
     Success: boolean
 }
 
-interface AlarmIMEIUserNumber {
+export interface AlarmIMEIUserNumber {
     IMEI: string,
     Number: string
 }
@@ -56,7 +58,7 @@ export interface GetUserSettingsPostResponse {
     SystemSettingsVersion: string
 }
 
-interface ExternalDevice {
+export interface ExternalDevice {
     DeviceState: DeviceState,
     DevicePIN: number,
     PartitionNumber: string

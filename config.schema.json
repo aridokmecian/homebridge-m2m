@@ -22,6 +22,18 @@
                 "type": "string",
                 "required": true,
                 "description": "Password used when logging into RControl."
+            },
+            "imei": {
+                "title": "Panel IMEI",
+                "type": "string",
+                "required": false,
+                "description": "If your account has more than one panel registered, the IMEI of the one this accessory should control. Leave blank to use the first panel on the account."
+            },
+            "partitionNumber": {
+                "title": "Partition Number",
+                "type": "string",
+                "required": false,
+                "description": "If your panel has more than one partition, the partition this accessory should control. Leave blank to use the first partition on the panel."
             }
         }
     },

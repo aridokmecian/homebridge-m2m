@@ -1,5 +1,5 @@
 import { AccessoryConfig, AccessoryPlugin, API, CharacteristicEventTypes, CharacteristicGetCallback, CharacteristicSetCallback, CharacteristicValue, HAP, Logging, Service} from "homebridge";
-import { ServerAlarmState, DeviceState, Options, GetUserSettingsPostResponse, GetAllDeviceDataPostResponse } from "./types";
+import { ServerAlarmState, DeviceState, Options, GetUserSettingsPostResponse, GetAllDeviceDataPostResponse, AlarmIMEIUserNumber, ExternalDevice } from "./types";
 import { RControlAPI } from "./api";
 
 export = (api: API) => {
@@ -27,7 +27,9 @@ class RControl implements AccessoryPlugin {
         this.config = {
             name: config.name as string,
             username: config.username as string,
-            password: config.password as string
+            password: config.password as string,
+            imei: config.imei as string | undefined,
+            partitionNumber: config.partitionNumber as string | undefined
         };
 
         this.service = new this.hap.Service.SecuritySystem(config.name);
@@ -159,6 +161,30 @@ class RControl implements AccessoryPlugin {
         }
     }
 
+    // Picks which panel on the account this accessory controls: the one matching the configured
+    // IMEI, or the first on the account when none is configured.
+    selectImeiUserNumber = (userSettings: GetUserSettingsPostResponse): AlarmIMEIUserNumber | undefined => {
+        const numbers = userSettings.HAUserSettings.AlarmIMEIUserNumbers;
+        if (!this.config.imei) return numbers[0];
+        const match = numbers.find(number => number.IMEI === this.config.imei);
+        if (match === undefined) {
+            this.logger.error(`[RControl] Configured IMEI "${this.config.imei}" was not found on this account.`);
+        }
+        return match;
+    }
+
+    // Picks which partition on the selected panel this accessory controls: the one matching the
+    // configured partition number, or the first on the panel when none is configured.
+    selectExternalDevice = (deviceData: GetAllDeviceDataPostResponse): ExternalDevice | undefined => {
+        const devices = deviceData.AlarmControlSettingsV2Response.ExternalDevices;
+        if (!this.config.partitionNumber) return devices[0];
+        const match = devices.find(device => device.PartitionNumber === this.config.partitionNumber);
+        if (match === undefined) {
+            this.logger.error(`[RControl] Configured partition "${this.config.partitionNumber}" was not found on this panel.`);
+        }
+        return match;
+    }
+
     getCurrentAlarmState = async (): Promise<CharacteristicValue | undefined> => {
         if (this.lastUserSettingsResponse === undefined) { // We haven't fetched user settings yet
             const userSettingsResponse = await this.rcontrolApi.getUserSettings();
@@ -172,9 +198,12 @@ class RControl implements AccessoryPlugin {
         }
 
         if (this.lastUserSettingsResponse === undefined) return;
+        const imeiUserNumber = this.selectImeiUserNumber(this.lastUserSettingsResponse);
+        if (imeiUserNumber === undefined) return;
+
         const body = {
             // The following is what the API expects (as per the iOS app)
-            'IMEI': this.lastUserSettingsResponse.HAUserSettings.AlarmIMEIUserNumbers[0].IMEI,
+            'IMEI': imeiUserNumber.IMEI,
             'UserID': this.lastUserSettingsResponse.HAUserSettings.ID,
             'SerialNumber': '',
             'ReturnCamerasData': true,
@@ -186,23 +215,27 @@ class RControl implements AccessoryPlugin {
         } else {
             this.lastDeviceDataResponse = deviceDataResponse;
         }
-        const deviceState = deviceDataResponse?.AlarmControlSettingsV2Response.ExternalDevices[0].DeviceState;
-        return deviceState !== undefined ? this.deviceStateToHapState(deviceState) : undefined;
+        const externalDevice = deviceDataResponse !== undefined ? this.selectExternalDevice(deviceDataResponse) : undefined;
+        return externalDevice !== undefined ? this.deviceStateToHapState(externalDevice.DeviceState) : undefined;
     }
 
     updateAlarmState = async (newState: ServerAlarmState) => {
         if (this.lastUserSettingsResponse === undefined || this.lastDeviceDataResponse === undefined) return;
+        const imeiUserNumber = this.selectImeiUserNumber(this.lastUserSettingsResponse);
+        const externalDevice = this.selectExternalDevice(this.lastDeviceDataResponse);
+        if (imeiUserNumber === undefined || externalDevice === undefined) return;
+
         // The following is what the v3 API expects, confirmed via a live capture of the iOS
         // app's traffic. UserPIN is the literal string "EMPTY" when arming and is omitted
         // entirely when disarming; UserNumber is always sent empty.
         const body: { [key: string]: unknown } = {
-            'IMEI': this.lastUserSettingsResponse.HAUserSettings.AlarmIMEIUserNumbers[0].IMEI,
+            'IMEI': imeiUserNumber.IMEI,
             'UserNumber': '',
             'ArmingState': newState,
             'SerialNumber': this.lastDeviceDataResponse.AlarmControlSettingsV2Response.SerialNumber,
             'ProtocolNumber': 5,
-            'OutPIN': String(this.lastDeviceDataResponse.AlarmControlSettingsV2Response.ExternalDevices[0].DevicePIN),
-            'PartitionNumber': this.lastDeviceDataResponse.AlarmControlSettingsV2Response.ExternalDevices[0].PartitionNumber
+            'OutPIN': String(externalDevice.DevicePIN),
+            'PartitionNumber': externalDevice.PartitionNumber
         }
         if (newState !== ServerAlarmState.DISARMED) {
             body['UserPIN'] = 'EMPTY';
