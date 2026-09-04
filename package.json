@@ -1,6 +1,6 @@
 {
   "name": "homebridge-m2m",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "displayName": "Homebridge M2M",
   "description": "🚨 RControl Alarm System Plugin for Homebridge",
   "main": "dist/index.js",
