@@ -1,3 +1,5 @@
+<p align="center"><img src="branding/icon.svg" width="150" alt="homebridge-m2m icon"></p>
+
 # homebridge-m2m
 ### 🚨 RControl Alarm System Plugin for Homebridge
 
