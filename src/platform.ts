@@ -57,7 +57,18 @@ export class RControlPlatform implements DynamicPlatformPlugin {
         this.cachedAccessories.set(accessory.UUID, accessory);
     }
 
+    // Thin wrapper around the real startup logic: this runs off a Homebridge event with nothing
+    // above it to catch a rejection, so an unexpected error here (e.g. an API response shaped
+    // differently than expected) must not crash the whole process.
     private async didFinishLaunching() {
+        try {
+            await this.didFinishLaunchingUnsafe();
+        } catch (error) {
+            this.logger.error(`[RControl] Unexpected error during startup: ${error}`);
+        }
+    }
+
+    private async didFinishLaunchingUnsafe() {
         if (!this.config.username || !this.config.password) {
             this.logger.error('[RControl] No RControl credentials provided.');
             return;
@@ -171,7 +182,17 @@ export class RControlPlatform implements DynamicPlatformPlugin {
         this.logger.info(`[RControl] Discovered ${this.zoneAccessories.size} zone(s) on partition ${partitionNumber}.`);
     }
 
+    // Same reasoning as didFinishLaunching: this runs off a setInterval timer, so a thrown/rejected
+    // error here has no caller to catch it and would otherwise crash the process.
     private pollZoneStates = async () => {
+        try {
+            await this.pollZoneStatesUnsafe();
+        } catch (error) {
+            this.logger.error(`[RControl] Unexpected error while polling zone states: ${error}`);
+        }
+    }
+
+    private pollZoneStatesUnsafe = async () => {
         if (this.zoneImei === undefined || this.zoneUserId === undefined || this.zoneSerialNumber === undefined) return;
 
         const response = await this.rcontrolApi.getDeviceStatusData({
