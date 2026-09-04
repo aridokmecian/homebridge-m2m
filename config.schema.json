@@ -22,12 +22,6 @@
                 "type": "string",
                 "required": true,
                 "description": "Password used when logging into RControl."
-            },
-            "pin": {
-                "title": "PIN Code",
-                "type": "string",
-                "required": true,
-                "description": "The PIN code used when remote arming from RControl."
             }
         }
     },

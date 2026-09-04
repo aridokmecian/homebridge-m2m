@@ -27,8 +27,7 @@ class RControl implements AccessoryPlugin {
         this.config = {
             name: config.name as string,
             username: config.username as string,
-            password: config.password as string,
-            pin: config.pin as string
+            password: config.password as string
         };
 
         this.service = new this.hap.Service.SecuritySystem(config.name);

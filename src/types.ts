@@ -1,8 +1,7 @@
 export interface Options {
     name: string,
     username: string,
-    password: string,
-    pin: string
+    password: string
 }
 
 export interface CreateAuthCodePostResponse {
