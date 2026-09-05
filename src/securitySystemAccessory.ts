@@ -16,12 +16,17 @@ export class SecuritySystemAccessory {
     private lastDeviceDataResponse: GetAllDeviceDataPostResponse | undefined = undefined;
     private targetState: CharacteristicValue | undefined = undefined;
     private lastKnownState: CharacteristicValue | undefined = undefined;
+    // RControl only has one "stay" mode - DeviceState.STAY_ARMED can't tell Home and Night apart
+    // on its own, so deviceStateToHapState falls back to whichever of the two was last actually
+    // requested, rather than always collapsing back to Home. Defaults to Home.
+    private stayArmSubMode: CharacteristicValue;
 
     constructor(accessory: PlatformAccessory, logger: Logging, config: Options, hap: HAP, rcontrolApi: RControlAPI) {
         this.logger = logger;
         this.config = config;
         this.hap = hap;
         this.rcontrolApi = rcontrolApi;
+        this.stayArmSubMode = hap.Characteristic.SecuritySystemTargetState.STAY_ARM;
 
         this.service = accessory.getService(hap.Service.SecuritySystem) || accessory.addService(hap.Service.SecuritySystem, config.name);
         accessory.getService(hap.Service.AccessoryInformation) || accessory.addService(hap.Service.AccessoryInformation);
@@ -74,6 +79,10 @@ export class SecuritySystemAccessory {
     handleSecuritySystemTargetStateSet(value: CharacteristicValue, callback: CharacteristicSetCallback) {
         const targetServerState = this.hapStateToServerState(value);
         this.logger.info(`[RControl] Target state change requested: ${this.hapStateLabel(this.targetState)} -> ${this.hapStateLabel(value)}`);
+
+        if (value === this.hap.Characteristic.SecuritySystemTargetState.STAY_ARM || value === this.hap.Characteristic.SecuritySystemTargetState.NIGHT_ARM) {
+            this.stayArmSubMode = value;
+        }
 
         // Home and Night both arm RControl in the same "stay" mode, which the panel doesn't
         // distinguish. If we're already stay-armed, switching between Home and Night is a
@@ -241,13 +250,14 @@ export class SecuritySystemAccessory {
     }
 
     deviceStateToHapState(deviceState: DeviceState): CharacteristicValue {
-        // HAP's Stay and Night are both reported back as Stay since the panel only reports one
-        // "stay" status.
+        // The panel only reports one "stay" status, so a stay-armed DeviceState is reported back
+        // as whichever of Home/Night was last actually requested (stayArmSubMode), rather than
+        // always collapsing to Home - otherwise setting Night would immediately read back as Home.
         switch (deviceState) {
             case DeviceState.AWAY_ARMED:
                 return this.hap.Characteristic.SecuritySystemTargetState.AWAY_ARM;
             case DeviceState.STAY_ARMED:
-                return this.hap.Characteristic.SecuritySystemTargetState.STAY_ARM;
+                return this.stayArmSubMode;
             default:
                 return this.hap.Characteristic.SecuritySystemTargetState.DISARM;
         }
