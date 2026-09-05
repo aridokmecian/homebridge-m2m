@@ -48,13 +48,18 @@ export class SecuritySystemAccessory {
             this.refreshAlarmState();
             return;
         }
-        this.refreshAlarmState().then(state => {
-            if (state === undefined) {
-                callback(new Error('Failed to fetch current alarm state from M2M.'));
-            } else {
-                callback(null, state);
-            }
-        });
+        this.refreshAlarmState()
+            .then(state => {
+                if (state === undefined) {
+                    callback(new Error('Failed to fetch current alarm state from M2M.'));
+                } else {
+                    callback(null, state);
+                }
+            })
+            .catch(error => {
+                this.logger.error(`[M2M] Unexpected error while fetching current alarm state: ${error}`);
+                callback(error instanceof Error ? error : new Error(String(error)));
+            });
     }
 
     handleSecuritySystemTargetStateGet(callback: CharacteristicGetCallback) {
@@ -67,13 +72,18 @@ export class SecuritySystemAccessory {
             callback(null, this.lastKnownState);
             return;
         }
-        this.refreshAlarmState().then(state => {
-            if (state === undefined) {
-                callback(new Error('Failed to fetch current alarm state from M2M.'));
-            } else {
-                callback(null, state);
-            }
-        });
+        this.refreshAlarmState()
+            .then(state => {
+                if (state === undefined) {
+                    callback(new Error('Failed to fetch current alarm state from M2M.'));
+                } else {
+                    callback(null, state);
+                }
+            })
+            .catch(error => {
+                this.logger.error(`[M2M] Unexpected error while fetching current alarm state: ${error}`);
+                callback(error instanceof Error ? error : new Error(String(error)));
+            });
     }
 
     handleSecuritySystemTargetStateSet(value: CharacteristicValue, callback: CharacteristicSetCallback) {
@@ -123,7 +133,11 @@ export class SecuritySystemAccessory {
 
         armSequence
             .then(() => this.refreshAlarmState())
-            .then(() => callback());
+            .then(() => callback())
+            .catch(error => {
+                this.logger.error(`[M2M] Unexpected error while changing the arming state: ${error}`);
+                callback(error instanceof Error ? error : new Error(String(error)));
+            });
     }
 
     // Fetches the current alarm state, caches it, and pushes it to the CurrentState/TargetState
