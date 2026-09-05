@@ -31,6 +31,20 @@ export interface AlarmIMEIUserNumber {
     Number: string
 }
 
+export interface MobileDeviceInfo {
+    IMEI: string,
+    SN: string,
+    Connected: boolean,
+    Label: string | null
+}
+
+// Response shape of POST /api/v3/getmobiledevicesinfo, confirmed via a live capture of the iOS
+// app's traffic. Label is the account's own human-readable name for the panel (e.g. an address) -
+// only used by the config UI's panel picker to show something more useful than a bare IMEI.
+export interface GetMobileDevicesInfoPostResponse {
+    MobileDevicesInfo: MobileDeviceInfo[]
+}
+
 export interface GetUserSettingsPostResponse {
     ErrorCode: number,
     ErrorString: string,

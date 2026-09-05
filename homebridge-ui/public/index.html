@@ -1,0 +1,231 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+    /* Config UI X injects its own Bootstrap stylesheet and a "dark-mode" class on <body> into
+       this iframe automatically, but its dark colors are Bootstrap 5's CSS-variable-based theme
+       (activated by a [data-bs-theme] attribute the injected class doesn't set) - so, matching
+       the same fix homebridge-wemo's custom UI uses, dark mode is styled explicitly here instead
+       of relying on that cascade. Light mode needs no overrides; the injected stylesheet's
+       un-themed defaults already match natively.
+    */
+    .dark-mode {
+        background-color: #242424;
+        color: lightgrey;
+    }
+    .dark-mode .form-control,
+    .dark-mode .form-select {
+        background-color: #333333 !important;
+        border: none !important;
+        color: #eeeeee !important;
+    }
+    .dark-mode .text-muted {
+        color: #aaaaaa !important;
+    }
+    .dark-mode .btn-outline-secondary {
+        border-color: #555555 !important;
+        color: #eeeeee !important;
+    }
+    .dark-mode details {
+        border-color: #444444 !important;
+    }
+
+    .panel-row { display: flex; gap: 8px; align-items: flex-start; }
+    .panel-row select { flex: 1; }
+    details { border: 1px solid rgba(0, 0, 0, 0.175); border-radius: 4px; margin-bottom: 1rem; }
+    details summary { padding: 0.5rem 0.75rem; font-weight: 600; cursor: pointer; }
+    details[open] summary { border-bottom: 1px solid rgba(0, 0, 0, 0.175); }
+    details .details-body { padding: 0.75rem; }
+</style>
+</head>
+<body>
+    <div class="form-group">
+        <label for="name">Name</label>
+        <input type="text" class="form-control" id="name">
+    </div>
+
+    <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" class="form-control" id="username" autocomplete="username">
+        <small class="form-text text-muted">Used to log into your RControl or DSC Connect account.</small>
+    </div>
+
+    <div class="form-group">
+        <label for="password">Password</label>
+        <div class="input-group">
+            <input type="password" class="form-control" id="password" autocomplete="current-password">
+            <button type="button" class="btn btn-outline-secondary" id="togglePassword" aria-label="Show password">
+                <i class="fas fa-eye" id="togglePasswordIcon"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="form-check mb-3">
+        <input type="checkbox" class="form-check-input" id="enableZoneSensors">
+        <label class="form-check-label" for="enableZoneSensors">Enable Zone Sensors</label>
+        <small class="form-text text-muted">Register each alarm zone as a HomeKit contact/motion sensor.</small>
+    </div>
+
+    <div class="form-group">
+        <label for="panel">Panel</label>
+        <div class="panel-row">
+            <select class="form-select" id="panel" disabled>
+                <option value="">Use the first panel on the account</option>
+            </select>
+            <button id="fetchPanels" type="button" class="btn btn-primary">Fetch Panels</button>
+        </div>
+        <small class="form-text text-muted">If your account has more than one panel, log in above and pick which one this accessory should control.</small>
+        <small id="panelStatus" class="form-text"></small>
+    </div>
+
+    <details id="advancedSettings">
+        <summary>Advanced Settings</summary>
+        <div class="details-body">
+            <div class="form-group">
+                <label for="partitionNumber">Partition Number</label>
+                <input type="text" class="form-control" id="partitionNumber">
+                <small class="form-text text-muted">If your panel has more than one partition, the partition this accessory should control. Leave blank to use the first partition on the panel.</small>
+            </div>
+
+            <div class="form-group mb-0">
+                <label for="pollingIntervalSeconds">Zone Polling Interval (seconds)</label>
+                <input type="number" class="form-control" id="pollingIntervalSeconds" min="5" step="1">
+                <small class="form-text text-muted">How often to check for zone state changes when zone sensors are enabled.</small>
+            </div>
+        </div>
+    </details>
+
+<script>
+(async () => {
+    const els = {
+        name: document.getElementById('name'),
+        username: document.getElementById('username'),
+        password: document.getElementById('password'),
+        togglePassword: document.getElementById('togglePassword'),
+        togglePasswordIcon: document.getElementById('togglePasswordIcon'),
+        enableZoneSensors: document.getElementById('enableZoneSensors'),
+        panel: document.getElementById('panel'),
+        fetchPanels: document.getElementById('fetchPanels'),
+        panelStatus: document.getElementById('panelStatus'),
+        partitionNumber: document.getElementById('partitionNumber'),
+        pollingIntervalSeconds: document.getElementById('pollingIntervalSeconds'),
+        advancedSettings: document.getElementById('advancedSettings'),
+    };
+
+    els.advancedSettings.addEventListener('toggle', () => homebridge.fixScrollHeight());
+
+    els.togglePassword.addEventListener('click', () => {
+        const showing = els.password.type === 'text';
+        els.password.type = showing ? 'password' : 'text';
+        els.togglePasswordIcon.classList.toggle('fa-eye', showing);
+        els.togglePasswordIcon.classList.toggle('fa-eye-slash', !showing);
+        els.togglePassword.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+    });
+
+    // This custom UI only supports one M2M platform block; with more than one configured,
+    // the rest are left untouched on disk and only the first is editable here.
+    const configs = await homebridge.getPluginConfig();
+    const config = configs[0] || { platform: 'M2M', name: 'Alarm' };
+    if (configs.length === 0) {
+        configs.push(config);
+    }
+
+    const setPanelStatus = (message, isError) => {
+        els.panelStatus.textContent = message || '';
+        els.panelStatus.classList.toggle('text-danger', !!isError);
+        els.panelStatus.classList.toggle('text-muted', !isError);
+    };
+
+    const persist = async () => {
+        await homebridge.updatePluginConfig(configs);
+    };
+
+    const validate = () => {
+        if (els.username.value.trim() && els.password.value) {
+            homebridge.enableSaveButton();
+        } else {
+            homebridge.disableSaveButton();
+        }
+    };
+
+    // Populate fields from the existing config.
+    els.name.value = config.name || 'Alarm';
+    els.username.value = config.username || '';
+    els.password.value = config.password || '';
+    els.enableZoneSensors.checked = !!config.enableZoneSensors;
+    els.partitionNumber.value = config.partitionNumber || '';
+    els.pollingIntervalSeconds.value = config.pollingIntervalSeconds || '';
+    if (config.imei) {
+        const opt = document.createElement('option');
+        opt.value = config.imei;
+        opt.textContent = config.imei;
+        opt.selected = true;
+        els.panel.appendChild(opt);
+    }
+
+    validate();
+    homebridge.fixScrollHeight();
+
+    els.name.addEventListener('input', () => { config.name = els.name.value; persist(); });
+    els.username.addEventListener('input', () => { config.username = els.username.value; validate(); persist(); });
+    els.password.addEventListener('input', () => { config.password = els.password.value; validate(); persist(); });
+    els.enableZoneSensors.addEventListener('change', () => { config.enableZoneSensors = els.enableZoneSensors.checked; persist(); });
+    els.partitionNumber.addEventListener('input', () => {
+        config.partitionNumber = els.partitionNumber.value.trim() || undefined;
+        persist();
+    });
+    els.pollingIntervalSeconds.addEventListener('input', () => {
+        const value = Number.parseInt(els.pollingIntervalSeconds.value, 10);
+        config.pollingIntervalSeconds = Number.isFinite(value) ? value : undefined;
+        persist();
+    });
+    els.panel.addEventListener('change', () => {
+        config.imei = els.panel.value || undefined;
+        persist();
+    });
+
+    els.fetchPanels.addEventListener('click', async () => {
+        setPanelStatus('');
+        if (!els.username.value.trim() || !els.password.value) {
+            setPanelStatus('Enter a username and password first.', true);
+            return;
+        }
+
+        els.fetchPanels.disabled = true;
+        homebridge.showSpinner();
+        try {
+            const panels = await homebridge.request('/fetchPanels', {
+                username: els.username.value,
+                password: els.password.value,
+            });
+
+            const previouslySelected = els.panel.value;
+            els.panel.innerHTML = '';
+            const defaultOpt = document.createElement('option');
+            defaultOpt.value = '';
+            defaultOpt.textContent = 'Use the first panel on the account';
+            els.panel.appendChild(defaultOpt);
+
+            for (const panel of panels) {
+                const opt = document.createElement('option');
+                opt.value = panel.IMEI;
+                opt.textContent = panel.Label ? `${panel.Label} (${panel.IMEI})` : panel.IMEI;
+                els.panel.appendChild(opt);
+            }
+
+            els.panel.value = panels.some((p) => p.IMEI === previouslySelected) ? previouslySelected : (config.imei || '');
+            els.panel.disabled = false;
+            setPanelStatus(`Found ${panels.length} panel(s).`, false);
+        } catch (err) {
+            setPanelStatus(err.message || 'Failed to fetch panels.', true);
+        } finally {
+            els.fetchPanels.disabled = false;
+            homebridge.hideSpinner();
+            homebridge.fixScrollHeight();
+        }
+    });
+})();
+</script>
+</body>
+</html>

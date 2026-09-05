@@ -7,7 +7,8 @@
   "files": [
     "dist",
     "config.schema.json",
-    "branding"
+    "branding",
+    "homebridge-ui"
   ],
   "scripts": {
     "clean": "rimraf ./dist",
@@ -48,6 +49,7 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
+    "@homebridge/plugin-ui-utils": "^2.2.6",
     "node-fetch": "^2.7.0"
   }
 }

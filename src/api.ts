@@ -1,7 +1,7 @@
 import { Logging } from "homebridge";
 import fetch, { Headers } from "node-fetch";
 import { API_URL, AUTH_TOKEN_HEADER_NAME } from "./settings";
-import { CreateAuthCodePostResponse, CreateAccessTokenPostResponse, GetUserSettingsPostResponse, GetAllDeviceDataPostResponse, GetDeviceStatusDataPostResponse, UpdateArmStatusPostResponse } from "./types";
+import { CreateAuthCodePostResponse, CreateAccessTokenPostResponse, GetUserSettingsPostResponse, GetAllDeviceDataPostResponse, GetDeviceStatusDataPostResponse, GetMobileDevicesInfoPostResponse, UpdateArmStatusPostResponse } from "./types";
 
 // The M2M server can take 15-40s to confirm an arm/disarm with the panel over its cellular
 // connection, but it occasionally drops the connection without ever responding. node-fetch has
@@ -142,6 +142,14 @@ export class M2MAPI {
         if (!this.ensureLoggedIn('getdevicestatusdata')) return;
         const url = API_URL + 'getdevicestatusdata';
         return this.request<GetDeviceStatusDataPostResponse>('getdevicestatusdata', url, body);
+    }
+
+    // Only used by the config UI's panel picker, to show each panel's account-assigned label
+    // (e.g. an address) instead of a bare IMEI.
+    getMobileDevicesInfo = async (): Promise<GetMobileDevicesInfoPostResponse | undefined> => {
+        if (!this.ensureLoggedIn('getmobiledevicesinfo')) return;
+        const url = API_URL + 'getmobiledevicesinfo';
+        return this.request<GetMobileDevicesInfoPostResponse>('getmobiledevicesinfo', url, { 'RequestVersion': 1 });
     }
 
 }

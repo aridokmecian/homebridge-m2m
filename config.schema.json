@@ -2,6 +2,7 @@
     "pluginAlias": "M2M",
     "pluginType": "platform",
     "singular": false,
+    "customUi": true,
     "schema": {
         "type": "object",
         "properties": {
