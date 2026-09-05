@@ -1,6 +1,6 @@
 {
   "name": "homebridge-m2m",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "displayName": "Homebridge M2M",
   "description": "🚨 M2M Services Alarm System Plugin for Homebridge (RControl / DSC Connect)",
   "main": "dist/index.js",
