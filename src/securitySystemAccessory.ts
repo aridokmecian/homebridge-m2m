@@ -1,5 +1,5 @@
 import { CharacteristicEventTypes, CharacteristicGetCallback, CharacteristicSetCallback, CharacteristicValue, HAP, Logging, PlatformAccessory } from "homebridge";
-import { ServerAlarmState, DeviceState, Options, GetUserSettingsPostResponse, GetAllDeviceDataPostResponse, AlarmIMEIUserNumber, ExternalDevice } from "./types";
+import { ServerAlarmState, DeviceState, Options, GetUserSettingsPostResponse, GetAllDeviceDataPostResponse, AlarmIMEIUserNumber, ZonePartition } from "./types";
 import { RControlAPI } from "./api";
 
 // The security panel accessory: arm/disarm state and HomeKit's SecuritySystem service. Wraps a
@@ -157,13 +157,15 @@ export class SecuritySystemAccessory {
     }
 
     // Picks which partition on the selected panel this accessory controls: the one matching the
-    // configured partition number, or the first on the panel when none is configured.
-    selectExternalDevice = (deviceData: GetAllDeviceDataPostResponse): ExternalDevice | undefined => {
+    // configured partition number, or partition "1" when none is configured. ExternalDevices can
+    // include non-partition pseudo-entries (e.g. "EmergencyKeys", with PartitionNumber: null), so
+    // this must match by PartitionNumber rather than taking the first entry in the array.
+    selectExternalDevice = (deviceData: GetAllDeviceDataPostResponse): ZonePartition | undefined => {
         const devices = deviceData.AlarmControlSettingsV2Response.ExternalDevices;
-        if (!this.config.partitionNumber) return devices[0];
-        const match = devices.find(device => device.PartitionNumber === this.config.partitionNumber);
+        const partitionNumber = this.config.partitionNumber || '1';
+        const match = devices.find(device => device.PartitionNumber === partitionNumber);
         if (match === undefined) {
-            this.logger.error(`[RControl] Configured partition "${this.config.partitionNumber}" was not found on this panel.`);
+            this.logger.error(`[RControl] Configured partition "${partitionNumber}" was not found on this panel.`);
         }
         return match;
     }
@@ -185,12 +187,12 @@ export class SecuritySystemAccessory {
         if (imeiUserNumber === undefined) return;
 
         const body = {
-            // The following is what the API expects (as per the iOS app)
+            // The following is what the v3 API expects, confirmed via a live capture of the iOS
+            // app's traffic.
             'IMEI': imeiUserNumber.IMEI,
-            'UserID': this.lastUserSettingsResponse.HAUserSettings.ID,
-            'SerialNumber': '',
-            'ReturnCamerasData': true,
-            'ProtocolNumber': 4
+            'ProtocolNumber': 5,
+            'ReturnCamerasData': false,
+            'UserID': this.lastUserSettingsResponse.HAUserSettings.ID
         }
         const deviceDataResponse = await this.rcontrolApi.getAllDeviceData(body);
         if (deviceDataResponse?.AlarmControlSettingsV2Response.ExternalDevices.length === 0) {
@@ -217,7 +219,7 @@ export class SecuritySystemAccessory {
             'ArmingState': newState,
             'SerialNumber': this.lastDeviceDataResponse.AlarmControlSettingsV2Response.SerialNumber,
             'ProtocolNumber': 5,
-            'OutPIN': String(externalDevice.DevicePIN),
+            'OutPIN': '',
             'PartitionNumber': externalDevice.PartitionNumber
         }
         if (newState !== ServerAlarmState.DISARMED) {
@@ -234,6 +236,9 @@ export class SecuritySystemAccessory {
             response = await this.rcontrolApi.updateArmStatus(body);
             if (response?.ErrorCode !== NOT_CONFIRMED_ERROR_CODE) break;
             this.logger.warn(`RControl did not confirm the arming state change (attempt ${attempt}/${MAX_ATTEMPTS}).` + (attempt < MAX_ATTEMPTS ? ' Retrying...' : ''));
+        }
+        if (response !== undefined && response.ErrorCode !== 0) {
+            this.logger.error(`[RControl] remotearm was rejected: ErrorCode ${response.ErrorCode}, ErrorString: "${response.ErrorString}".`);
         }
         return response;
     }

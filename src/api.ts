@@ -1,7 +1,7 @@
 import { Logging } from "homebridge";
 import fetch, { Headers } from "node-fetch";
-import { API_URL, API_URL_V3, AUTH_TOKEN_HEADER_NAME } from "./settings";
-import { CreateAuthCodePostResponse, CreateAccessTokenPostResponse, GetUserSettingsPostResponse, GetAllDeviceDataPostResponse, GetAllDeviceDataV3PostResponse, GetDeviceStatusDataPostResponse, UpdateArmStatusPostResponse } from "./types";
+import { API_URL, AUTH_TOKEN_HEADER_NAME } from "./settings";
+import { CreateAuthCodePostResponse, CreateAccessTokenPostResponse, GetUserSettingsPostResponse, GetAllDeviceDataPostResponse, GetDeviceStatusDataPostResponse, UpdateArmStatusPostResponse } from "./types";
 
 // RControl's server can take 15-40s to confirm an arm/disarm with the panel over its cellular
 // connection, but it occasionally drops the connection without ever responding. node-fetch has
@@ -11,6 +11,7 @@ const REQUEST_TIMEOUT_MS = 60000;
 export class RControlAPI {
     private logger: Logging;
     private headers: Headers;
+    private cachedUserSettings: GetUserSettingsPostResponse | undefined;
 
     constructor(logger: Logging) {
         this.logger = logger;
@@ -78,6 +79,10 @@ export class RControlAPI {
 
         this.headers.set(AUTH_TOKEN_HEADER_NAME, accessToken);
         this.logger.debug('[RControl] Login succeeded.');
+
+        // v3's getalldevicedata and getdevicestatusdata both require UserID, which only
+        // gethausersettings provides - fetch and cache it now so every caller can reuse it.
+        await this.getUserSettings();
     }
 
     createAuthCode = async (username: string, password: string): Promise<CreateAuthCodePostResponse | undefined> => {
@@ -93,17 +98,28 @@ export class RControlAPI {
     createAccessToken = async (authCode: string): Promise<CreateAccessTokenPostResponse | undefined> => {
         const url = API_URL + 'createaccesstoken';
         const body = {
-            'AuthCode': authCode,
+            'AuthCode': authCode
         }
         return this.request<CreateAccessTokenPostResponse>('createaccesstoken', url, body);
     }
 
+    // Memoized: gethausersettings is called once from login() to seed UserID for every other v3
+    // call, and callers that need the response later (e.g. to pick an IMEI) get the cached result
+    // instead of hitting the network again.
     getUserSettings = async (): Promise<GetUserSettingsPostResponse | undefined> => {
         if (!this.ensureLoggedIn('gethausersettings')) return;
+        if (this.cachedUserSettings !== undefined) return this.cachedUserSettings;
+
         const url = API_URL + 'gethausersettings';
-        return this.request<GetUserSettingsPostResponse>('gethausersettings', url, {});
+        const response = await this.request<GetUserSettingsPostResponse>('gethausersettings', url, {});
+        if (response?.Success) {
+            this.cachedUserSettings = response;
+        }
+        return response;
     }
 
+    // Used both to discover zones/names at startup and to fetch a partition's current DeviceState
+    // (e.g. for the security system accessory's current-state poll).
     getAllDeviceData = async (body: Record<string, unknown>): Promise<GetAllDeviceDataPostResponse | undefined> => {
         if (!this.ensureLoggedIn('getalldevicedata')) return;
         const url = API_URL + 'getalldevicedata';
@@ -112,22 +128,13 @@ export class RControlAPI {
 
     updateArmStatus = async (body: Record<string, unknown>): Promise<UpdateArmStatusPostResponse | undefined> => {
         if (!this.ensureLoggedIn('remotearm')) return;
-        const url = API_URL_V3 + 'remotearm';
+        const url = API_URL + 'remotearm';
         return this.request<UpdateArmStatusPostResponse>('remotearm', url, body);
-    }
-
-    // Used once at startup to discover zones and their names. Distinct from getAllDeviceData
-    // above: same endpoint name, but on v3 with a different request body and response shape (the
-    // v2 call used for panel state doesn't include zone data).
-    getAllDeviceDataV3 = async (body: Record<string, unknown>): Promise<GetAllDeviceDataV3PostResponse | undefined> => {
-        if (!this.ensureLoggedIn('getalldevicedata (v3)')) return;
-        const url = API_URL_V3 + 'getalldevicedata';
-        return this.request<GetAllDeviceDataV3PostResponse>('getalldevicedata (v3)', url, body);
     }
 
     getDeviceStatusData = async (body: Record<string, unknown>): Promise<GetDeviceStatusDataPostResponse | undefined> => {
         if (!this.ensureLoggedIn('getdevicestatusdata')) return;
-        const url = API_URL_V3 + 'getdevicestatusdata';
+        const url = API_URL + 'getdevicestatusdata';
         return this.request<GetDeviceStatusDataPostResponse>('getdevicestatusdata', url, body);
     }
 

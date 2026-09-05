@@ -21,7 +21,8 @@ export interface CreateAccessTokenPostResponse {
     AdminLogin: boolean,
     ErrorCode: number,
     ErrorMsg: string,
-    RefreshToken: string, 
+    ExpirationDate: number,
+    RefreshToken: string,
     Success: boolean
 }
 
@@ -58,23 +59,6 @@ export interface GetUserSettingsPostResponse {
     },
     Success: boolean,
     SystemSettingsVersion: string
-}
-
-export interface ExternalDevice {
-    DeviceState: DeviceState,
-    DevicePIN: number,
-    PartitionNumber: string
-}
-
-export interface GetAllDeviceDataPostResponse {
-    AlarmControlSettingsV2Response: {
-        SerialNumber: string,
-        ExternalDevices: ExternalDevice[]
-    },
-    ClientDeviceDataV2Response: {
-        SerialNumber: string,
-        SiteNo: string
-    }
 }
 
 export interface UpdateArmStatusPostResponse {
@@ -115,16 +99,17 @@ export interface Zone {
 // "EmergencyKeys" entry with PartitionNumber: null and ZonesInfo: null) alongside the real
 // partition device, whose Name is account-specific (the panel's own serial-like name, not a
 // generic "Partition N" string) - so partitions must be matched by PartitionNumber, not Name.
-interface ZonePartition {
+export interface ZonePartition {
     Name: string,
     PartitionNumber: string | null,
+    DeviceState: DeviceState,
     ZonesInfo: Zone[] | null
 }
 
 // Response shape of POST /api/v3/getalldevicedata, confirmed via a live capture of the iOS app's
-// traffic. Used once at startup to discover the zones on the account's first (or configured)
-// partition, alongside their names.
-export interface GetAllDeviceDataV3PostResponse {
+// traffic. Used both to discover the zones on the account's first (or configured) partition
+// alongside their names, and to read the partition's current DeviceState.
+export interface GetAllDeviceDataPostResponse {
     AlarmControlSettingsV2Response: {
         SerialNumber: string,
         ExternalDevices: ZonePartition[]

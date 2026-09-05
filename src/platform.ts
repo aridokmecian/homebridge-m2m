@@ -137,7 +137,7 @@ export class RControlPlatform implements DynamicPlatformPlugin {
     }
 
     private async discoverAndRegisterZones(imei: string, userId: string) {
-        const response = await this.rcontrolApi.getAllDeviceDataV3({
+        const response = await this.rcontrolApi.getAllDeviceData({
             'IMEI': imei,
             'ProtocolNumber': 5,
             'ReturnCamerasData': false,
