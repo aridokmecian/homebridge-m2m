@@ -1,11 +1,10 @@
 import { Logging } from "homebridge";
-import fetch, { Headers } from "node-fetch";
 import { API_URL, AUTH_TOKEN_HEADER_NAME } from "./settings";
 import { CreateAuthCodePostResponse, CreateAccessTokenPostResponse, GetUserSettingsPostResponse, GetAllDeviceDataPostResponse, GetDeviceStatusDataPostResponse, GetMobileDevicesInfoPostResponse, UpdateArmStatusPostResponse } from "./types";
 
 // The M2M server can take 15-40s to confirm an arm/disarm with the panel over its cellular
-// connection, but it occasionally drops the connection without ever responding. node-fetch has
-// no default timeout, so without this an arm/disarm request can hang indefinitely.
+// connection, but it occasionally drops the connection without ever responding. fetch has no
+// default timeout, so without this an arm/disarm request can hang indefinitely.
 const REQUEST_TIMEOUT_MS = 60000;
 
 export class M2MAPI {
