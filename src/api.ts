@@ -7,10 +7,17 @@ import { CreateAuthCodePostResponse, CreateAccessTokenPostResponse, GetUserSetti
 // default timeout, so without this an arm/disarm request can hang indefinitely.
 const REQUEST_TIMEOUT_MS = 60000;
 
+// Re-authenticate slightly before the token's actual expiration, so a call doesn't race a token
+// that's valid when checked but expires before the request completes.
+const TOKEN_REFRESH_MARGIN_MS = 60000;
+
 export class M2MAPI {
     private logger: Logging;
     private headers: Headers;
     private cachedUserSettings: GetUserSettingsPostResponse | undefined;
+    private username: string | undefined;
+    private password: string | undefined;
+    private expirationDate: number | undefined;
 
     constructor(logger: Logging) {
         this.logger = logger;
@@ -51,6 +58,10 @@ export class M2MAPI {
             if (parsed && typeof parsed === 'object' && parsed.Success === false) {
                 const errorMessage = parsed.ErrorMsg ?? parsed.ErrorString ?? 'no error message provided';
                 this.logger.error(`[M2M] ${label} was rejected: ErrorCode ${parsed.ErrorCode}, "${errorMessage}".`);
+                // An error response doesn't have the shape callers expect (e.g. ExternalDevices
+                // may be missing or null) - treat it the same as a network failure rather than
+                // handing back a malformed object typed as if it were a valid T.
+                return undefined;
             }
             return parsed as T;
         } catch (error) {
@@ -59,15 +70,26 @@ export class M2MAPI {
         }
     }
 
-    private ensureLoggedIn = (label: string): boolean => {
+    // Also re-authenticates when the current token is at (or close to) its expiration, so a
+    // long-running Homebridge process doesn't get stuck repeating "ERROR: TOKEN EXPIRED" from
+    // every call after the first login until it's manually restarted.
+    private ensureLoggedIn = async (label: string): Promise<boolean> => {
         if (!this.isLoggedIn()) {
             this.logger.error(`[M2M] Cannot call ${label}: not logged in to M2M yet.`);
             return false;
         }
-        return true;
+        if (this.username !== undefined && this.password !== undefined
+            && this.expirationDate !== undefined && Date.now() >= this.expirationDate - TOKEN_REFRESH_MARGIN_MS) {
+            this.logger.debug(`[M2M] Access token expiring soon; re-authenticating before ${label}.`);
+            await this.login(this.username, this.password);
+        }
+        return this.isLoggedIn();
     }
 
     login = async (username: string, password: string) => {
+        this.username = username;
+        this.password = password;
+
         const createAuthCodeResponse = await this.createAuthCode(username, password);
         const authCode = createAuthCodeResponse?.AuthCode;
         if (!authCode) {
@@ -83,6 +105,7 @@ export class M2MAPI {
         }
 
         this.headers.set(AUTH_TOKEN_HEADER_NAME, accessToken);
+        this.expirationDate = createAccessTokenResponse.ExpirationDate;
         this.logger.debug('[M2M] Login succeeded.');
 
         // v3's getalldevicedata and getdevicestatusdata both require UserID, which only
@@ -112,7 +135,7 @@ export class M2MAPI {
     // call, and callers that need the response later (e.g. to pick an IMEI) get the cached result
     // instead of hitting the network again.
     getUserSettings = async (): Promise<GetUserSettingsPostResponse | undefined> => {
-        if (!this.ensureLoggedIn('gethausersettings')) return;
+        if (!(await this.ensureLoggedIn('gethausersettings'))) return;
         if (this.cachedUserSettings !== undefined) return this.cachedUserSettings;
 
         const url = API_URL + 'gethausersettings';
@@ -126,19 +149,19 @@ export class M2MAPI {
     // Used both to discover zones/names at startup and to fetch a partition's current DeviceState
     // (e.g. for the security system accessory's current-state poll).
     getAllDeviceData = async (body: Record<string, unknown>): Promise<GetAllDeviceDataPostResponse | undefined> => {
-        if (!this.ensureLoggedIn('getalldevicedata')) return;
+        if (!(await this.ensureLoggedIn('getalldevicedata'))) return;
         const url = API_URL + 'getalldevicedata';
         return this.request<GetAllDeviceDataPostResponse>('getalldevicedata', url, body);
     }
 
     updateArmStatus = async (body: Record<string, unknown>): Promise<UpdateArmStatusPostResponse | undefined> => {
-        if (!this.ensureLoggedIn('remotearm')) return;
+        if (!(await this.ensureLoggedIn('remotearm'))) return;
         const url = API_URL + 'remotearm';
         return this.request<UpdateArmStatusPostResponse>('remotearm', url, body);
     }
 
     getDeviceStatusData = async (body: Record<string, unknown>): Promise<GetDeviceStatusDataPostResponse | undefined> => {
-        if (!this.ensureLoggedIn('getdevicestatusdata')) return;
+        if (!(await this.ensureLoggedIn('getdevicestatusdata'))) return;
         const url = API_URL + 'getdevicestatusdata';
         return this.request<GetDeviceStatusDataPostResponse>('getdevicestatusdata', url, body);
     }
@@ -146,7 +169,7 @@ export class M2MAPI {
     // Only used by the config UI's panel picker, to show each panel's account-assigned label
     // (e.g. an address) instead of a bare IMEI.
     getMobileDevicesInfo = async (): Promise<GetMobileDevicesInfoPostResponse | undefined> => {
-        if (!this.ensureLoggedIn('getmobiledevicesinfo')) return;
+        if (!(await this.ensureLoggedIn('getmobiledevicesinfo'))) return;
         const url = API_URL + 'getmobiledevicesinfo';
         return this.request<GetMobileDevicesInfoPostResponse>('getmobiledevicesinfo', url, { 'RequestVersion': 1 });
     }
