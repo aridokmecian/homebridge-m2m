@@ -9,19 +9,16 @@
             "name": {
                 "title": "Name",
                 "type": "string",
-                "default": "Alarm",
-                "required": true
+                "default": "Alarm"
             },
             "username": {
                 "title": "Username",
                 "type": "string",
-                "required": true,
                 "description": "Username used when logging into your RControl or DSC Connect account."
             },
             "password": {
                 "title": "Password",
                 "type": "string",
-                "required": true,
                 "description": "Password used when logging into your RControl or DSC Connect account."
             },
             "enableZoneSensors": {
@@ -33,13 +30,11 @@
             "imei": {
                 "title": "Panel IMEI",
                 "type": "string",
-                "required": false,
                 "description": "If your account has more than one panel registered, the IMEI of the one this accessory should control. Leave blank to use the first panel on the account."
             },
             "partitionNumber": {
                 "title": "Partition Number",
                 "type": "string",
-                "required": false,
                 "description": "If your panel has more than one partition, the partition this accessory should control. Leave blank to use the first partition on the panel."
             },
             "pollingIntervalSeconds": {
@@ -49,7 +44,12 @@
                 "minimum": 5,
                 "description": "How often to check for zone state changes when zone sensors are enabled."
             }
-        }
+        },
+        "required": [
+            "name",
+            "username",
+            "password"
+        ]
     },
     "form": [
         "name",

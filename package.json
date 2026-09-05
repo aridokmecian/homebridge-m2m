@@ -25,6 +25,7 @@
   },
   "keywords": [
     "homebridge-plugin",
+    "supports-hap",
     "homebridge",
     "rcontrol",
     "m2m",
@@ -32,6 +33,7 @@
     "DSC Connect",
     "security system"
   ],
+  "homepage": "https://github.com/aridokmecian/homebridge-m2m#readme",
   "license": "MIT",
   "repository": {
     "type": "git",
