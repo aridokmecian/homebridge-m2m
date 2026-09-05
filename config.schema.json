@@ -1,5 +1,5 @@
 {
-    "pluginAlias": "RControl",
+    "pluginAlias": "M2M",
     "pluginType": "platform",
     "singular": false,
     "schema": {
@@ -15,13 +15,13 @@
                 "title": "Username",
                 "type": "string",
                 "required": true,
-                "description": "Username used when logging into RControl."
+                "description": "Username used when logging into your RControl or DSC Connect account."
             },
             "password": {
                 "title": "Password",
                 "type": "string",
                 "required": true,
-                "description": "Password used when logging into RControl."
+                "description": "Password used when logging into your RControl or DSC Connect account."
             },
             "enableZoneSensors": {
                 "title": "Enable Zone Sensors",

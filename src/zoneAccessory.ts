@@ -31,7 +31,7 @@ export class ZoneAccessory {
 
         const isOpen = zoneState !== 1;
         if (this.lastZoneState !== undefined) {
-            this.logger.info(`[RControl] Zone "${this.displayName}" changed: ${isOpen ? 'open/triggered' : 'secure'}`);
+            this.logger.info(`[M2M] Zone "${this.displayName}" changed: ${isOpen ? 'open/triggered' : 'secure'}`);
         }
         this.lastZoneState = zoneState;
 

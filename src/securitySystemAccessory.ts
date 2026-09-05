@@ -1,31 +1,31 @@
 import { CharacteristicEventTypes, CharacteristicGetCallback, CharacteristicSetCallback, CharacteristicValue, HAP, Logging, PlatformAccessory } from "homebridge";
 import { ServerAlarmState, DeviceState, Options, GetUserSettingsPostResponse, GetAllDeviceDataPostResponse, AlarmIMEIUserNumber, ZonePartition } from "./types";
-import { RControlAPI } from "./api";
+import { M2MAPI } from "./api";
 
 // The security panel accessory: arm/disarm state and HomeKit's SecuritySystem service. Wraps a
-// PlatformAccessory managed by RControlPlatform, rather than being a standalone AccessoryPlugin.
+// PlatformAccessory managed by M2MPlatform, rather than being a standalone AccessoryPlugin.
 export class SecuritySystemAccessory {
 
     private readonly logger: Logging;
     private readonly config: Options;
     private readonly hap: HAP;
-    private readonly rcontrolApi: RControlAPI;
+    private readonly m2mApi: M2MAPI;
     private readonly service;
 
     private lastUserSettingsResponse: GetUserSettingsPostResponse | undefined = undefined;
     private lastDeviceDataResponse: GetAllDeviceDataPostResponse | undefined = undefined;
     private targetState: CharacteristicValue | undefined = undefined;
     private lastKnownState: CharacteristicValue | undefined = undefined;
-    // RControl only has one "stay" mode - DeviceState.STAY_ARMED can't tell Home and Night apart
+    // M2M only has one "stay" mode - DeviceState.STAY_ARMED can't tell Home and Night apart
     // on its own, so deviceStateToHapState falls back to whichever of the two was last actually
     // requested, rather than always collapsing back to Home. Defaults to Home.
     private stayArmSubMode: CharacteristicValue;
 
-    constructor(accessory: PlatformAccessory, logger: Logging, config: Options, hap: HAP, rcontrolApi: RControlAPI) {
+    constructor(accessory: PlatformAccessory, logger: Logging, config: Options, hap: HAP, m2mApi: M2MAPI) {
         this.logger = logger;
         this.config = config;
         this.hap = hap;
-        this.rcontrolApi = rcontrolApi;
+        this.m2mApi = m2mApi;
         this.stayArmSubMode = hap.Characteristic.SecuritySystemTargetState.STAY_ARM;
 
         this.service = accessory.getService(hap.Service.SecuritySystem) || accessory.addService(hap.Service.SecuritySystem, config.name);
@@ -40,7 +40,7 @@ export class SecuritySystemAccessory {
     }
 
     handleSecuritySystemCurrentStateGet(callback: CharacteristicGetCallback) {
-        // Fetching state from RControl's cloud can take several seconds, which is enough to trip
+        // Fetching state from M2M's cloud can take several seconds, which is enough to trip
         // Homebridge's "slow to respond" warning if we make HomeKit wait on it. Answer from the
         // last known state when we have one, and refresh it in the background instead.
         if (this.lastKnownState !== undefined) {
@@ -50,7 +50,7 @@ export class SecuritySystemAccessory {
         }
         this.refreshAlarmState().then(state => {
             if (state === undefined) {
-                callback(new Error('Failed to fetch current alarm state from RControl.'));
+                callback(new Error('Failed to fetch current alarm state from M2M.'));
             } else {
                 callback(null, state);
             }
@@ -69,7 +69,7 @@ export class SecuritySystemAccessory {
         }
         this.refreshAlarmState().then(state => {
             if (state === undefined) {
-                callback(new Error('Failed to fetch current alarm state from RControl.'));
+                callback(new Error('Failed to fetch current alarm state from M2M.'));
             } else {
                 callback(null, state);
             }
@@ -78,18 +78,18 @@ export class SecuritySystemAccessory {
 
     handleSecuritySystemTargetStateSet(value: CharacteristicValue, callback: CharacteristicSetCallback) {
         const targetServerState = this.hapStateToServerState(value);
-        this.logger.info(`[RControl] Target state change requested: ${this.hapStateLabel(this.targetState)} -> ${this.hapStateLabel(value)}`);
+        this.logger.info(`[M2M] Target state change requested: ${this.hapStateLabel(this.targetState)} -> ${this.hapStateLabel(value)}`);
 
         if (value === this.hap.Characteristic.SecuritySystemTargetState.STAY_ARM || value === this.hap.Characteristic.SecuritySystemTargetState.NIGHT_ARM) {
             this.stayArmSubMode = value;
         }
 
-        // Home and Night both arm RControl in the same "stay" mode, which the panel doesn't
+        // Home and Night both arm M2M in the same "stay" mode, which the panel doesn't
         // distinguish. If we're already stay-armed, switching between Home and Night is a
-        // local-only change; skip hitting RControl and just reflect the new HAP state.
+        // local-only change; skip hitting M2M and just reflect the new HAP state.
         const previousServerState = this.targetState !== undefined ? this.hapStateToServerState(this.targetState) : undefined;
         if (targetServerState === ServerAlarmState.STAY && previousServerState === ServerAlarmState.STAY) {
-            this.logger.info(`[RControl] ${this.hapStateLabel(this.targetState)} -> ${this.hapStateLabel(value)} is a Home/Night-only change; not contacting RControl.`);
+            this.logger.info(`[M2M] ${this.hapStateLabel(this.targetState)} -> ${this.hapStateLabel(value)} is a Home/Night-only change; not contacting M2M.`);
             this.targetState = value;
             this.lastKnownState = value;
             this.service.getCharacteristic(this.hap.Characteristic.SecuritySystemCurrentState).updateValue(value);
@@ -97,10 +97,10 @@ export class SecuritySystemAccessory {
             return;
         }
 
-        // RControl's API only supports arming from a disarmed state; it rejects a direct switch
+        // M2M's API only supports arming from a disarmed state; it rejects a direct switch
         // between away-armed and stay-armed. The Home app lets the user do that switch directly
         // from its buttons, so when it happens we disarm first and then arm into the requested
-        // state on RControl's behalf.
+        // state on M2M's behalf.
         const needsDisarmFirst = previousServerState !== undefined
             && previousServerState !== ServerAlarmState.DISARMED
             && targetServerState !== ServerAlarmState.DISARMED
@@ -108,13 +108,13 @@ export class SecuritySystemAccessory {
 
         let armSequence;
         if (needsDisarmFirst) {
-            this.logger.info(`[RControl] Disarming before switching from ${this.hapStateLabel(this.targetState)} to ${this.hapStateLabel(value)}...`);
+            this.logger.info(`[M2M] Disarming before switching from ${this.hapStateLabel(this.targetState)} to ${this.hapStateLabel(value)}...`);
             armSequence = this.updateAlarmState(ServerAlarmState.DISARMED).then(disarmResponse => {
                 if (disarmResponse?.ErrorCode !== 0) {
-                    this.logger.error('[RControl] Failed to disarm before switching arming mode; skipping re-arm.');
+                    this.logger.error('[M2M] Failed to disarm before switching arming mode; skipping re-arm.');
                     return disarmResponse;
                 }
-                this.logger.info(`[RControl] Disarmed; now arming to ${this.hapStateLabel(value)}...`);
+                this.logger.info(`[M2M] Disarmed; now arming to ${this.hapStateLabel(value)}...`);
                 return this.updateAlarmState(targetServerState);
             });
         } else {
@@ -132,7 +132,7 @@ export class SecuritySystemAccessory {
         return this.getCurrentAlarmState().then(state => {
             if (state !== undefined) {
                 if (state !== this.lastKnownState) {
-                    this.logger.info(`[RControl] Current state changed: ${this.hapStateLabel(this.lastKnownState)} -> ${this.hapStateLabel(state)}`);
+                    this.logger.info(`[M2M] Current state changed: ${this.hapStateLabel(this.lastKnownState)} -> ${this.hapStateLabel(state)}`);
                 }
                 this.lastKnownState = state;
                 this.targetState = state;
@@ -160,7 +160,7 @@ export class SecuritySystemAccessory {
         if (!this.config.imei) return numbers[0];
         const match = numbers.find(number => number.IMEI === this.config.imei);
         if (match === undefined) {
-            this.logger.error(`[RControl] Configured IMEI "${this.config.imei}" was not found on this account.`);
+            this.logger.error(`[M2M] Configured IMEI "${this.config.imei}" was not found on this account.`);
         }
         return match;
     }
@@ -174,14 +174,14 @@ export class SecuritySystemAccessory {
         const partitionNumber = this.config.partitionNumber || '1';
         const match = devices.find(device => device.PartitionNumber === partitionNumber);
         if (match === undefined) {
-            this.logger.error(`[RControl] Configured partition "${partitionNumber}" was not found on this panel.`);
+            this.logger.error(`[M2M] Configured partition "${partitionNumber}" was not found on this panel.`);
         }
         return match;
     }
 
     getCurrentAlarmState = async (): Promise<CharacteristicValue | undefined> => {
         if (this.lastUserSettingsResponse === undefined) { // We haven't fetched user settings yet
-            const userSettingsResponse = await this.rcontrolApi.getUserSettings();
+            const userSettingsResponse = await this.m2mApi.getUserSettings();
             if (userSettingsResponse === undefined) return;
 
             if (userSettingsResponse.HAUserSettings.AlarmIMEIUserNumbers.length === 0) {
@@ -203,7 +203,7 @@ export class SecuritySystemAccessory {
             'ReturnCamerasData': false,
             'UserID': this.lastUserSettingsResponse.HAUserSettings.ID
         }
-        const deviceDataResponse = await this.rcontrolApi.getAllDeviceData(body);
+        const deviceDataResponse = await this.m2mApi.getAllDeviceData(body);
         if (deviceDataResponse?.AlarmControlSettingsV2Response.ExternalDevices.length === 0) {
             this.logger.error('Failed to fetch alarm state: the provided credentials have no external devices in the account.');
         } else {
@@ -235,16 +235,16 @@ export class SecuritySystemAccessory {
             body['UserPIN'] = 'EMPTY';
         }
 
-        // The panel occasionally fails to confirm the state change back to RControl's server on
+        // The panel occasionally fails to confirm the state change back to M2M's server on
         // the first try (ErrorCode -2038, "NOT CONFIRMED") even though the command went through;
         // retrying once has been reliable.
         const NOT_CONFIRMED_ERROR_CODE = -2038;
         const MAX_ATTEMPTS = 5;
         let response;
         for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-            response = await this.rcontrolApi.updateArmStatus(body);
+            response = await this.m2mApi.updateArmStatus(body);
             if (response?.ErrorCode !== NOT_CONFIRMED_ERROR_CODE) break;
-            this.logger.warn(`RControl did not confirm the arming state change (attempt ${attempt}/${MAX_ATTEMPTS}).` + (attempt < MAX_ATTEMPTS ? ' Retrying...' : ''));
+            this.logger.warn(`M2M did not confirm the arming state change (attempt ${attempt}/${MAX_ATTEMPTS}).` + (attempt < MAX_ATTEMPTS ? ' Retrying...' : ''));
         }
         return response;
     }

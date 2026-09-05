@@ -1,7 +1,7 @@
 import { API, DynamicPlatformPlugin, HAP, Logging, PlatformAccessory, PlatformConfig } from "homebridge";
 import { PLATFORM_NAME, PLUGIN_NAME } from "./settings";
 import { Options } from "./types";
-import { RControlAPI } from "./api";
+import { M2MAPI } from "./api";
 import { SecuritySystemAccessory } from "./securitySystemAccessory";
 import { ZoneAccessory } from "./zoneAccessory";
 import { normalizeZoneName, zoneServiceTypeForName } from "./zoneNaming";
@@ -12,13 +12,13 @@ const DEFAULT_ZONE_POLL_INTERVAL_SECONDS = 10;
 // Matches the schema's minimum, enforced again here in case config.json was hand-edited past it.
 const MIN_ZONE_POLL_INTERVAL_SECONDS = 5;
 
-export class RControlPlatform implements DynamicPlatformPlugin {
+export class M2MPlatform implements DynamicPlatformPlugin {
 
     private readonly logger: Logging;
     private readonly config: Options;
     private readonly api: API;
     private readonly hap: HAP;
-    private readonly rcontrolApi: RControlAPI;
+    private readonly m2mApi: M2MAPI;
 
     // Accessories Homebridge restored from its cache on startup. Claimed (removed from this map)
     // as we match them to a discovered panel/zone during didFinishLaunching; whatever's left
@@ -35,7 +35,7 @@ export class RControlPlatform implements DynamicPlatformPlugin {
         this.logger = logger;
         this.api = api;
         this.hap = api.hap;
-        this.rcontrolApi = new RControlAPI(logger);
+        this.m2mApi = new M2MAPI(logger);
 
         this.config = {
             name: (config.name as string) || 'Alarm',
@@ -64,17 +64,17 @@ export class RControlPlatform implements DynamicPlatformPlugin {
         try {
             await this.didFinishLaunchingUnsafe();
         } catch (error) {
-            this.logger.error(`[RControl] Unexpected error during startup: ${error}`);
+            this.logger.error(`[M2M] Unexpected error during startup: ${error}`);
         }
     }
 
     private async didFinishLaunchingUnsafe() {
         if (!this.config.username || !this.config.password) {
-            this.logger.error('[RControl] No RControl credentials provided.');
+            this.logger.error('[M2M] No M2M credentials provided.');
             return;
         }
 
-        await this.rcontrolApi.login(this.config.username, this.config.password);
+        await this.m2mApi.login(this.config.username, this.config.password);
         this.registerSecuritySystemAccessory();
 
         if (this.config.enableZoneSensors) {
@@ -84,16 +84,16 @@ export class RControlPlatform implements DynamicPlatformPlugin {
         // Anything left in the cache wasn't claimed above (e.g. a zone that's gone, or zone
         // sensors got turned off) - remove it so it doesn't linger as a ghost accessory.
         for (const stale of this.cachedAccessories.values()) {
-            this.logger.info(`[RControl] Removing stale accessory: ${stale.displayName}`);
+            this.logger.info(`[M2M] Removing stale accessory: ${stale.displayName}`);
             this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [stale]);
         }
         this.cachedAccessories.clear();
     }
 
     private async setUpZoneSensors() {
-        const userSettings = await this.rcontrolApi.getUserSettings();
+        const userSettings = await this.m2mApi.getUserSettings();
         if (userSettings === undefined || userSettings.HAUserSettings.AlarmIMEIUserNumbers.length === 0) {
-            this.logger.error('[RControl] Failed to enable zone sensors: the provided credentials have no alarms in the account.');
+            this.logger.error('[M2M] Failed to enable zone sensors: the provided credentials have no alarms in the account.');
             return;
         }
 
@@ -102,7 +102,7 @@ export class RControlPlatform implements DynamicPlatformPlugin {
             ? imeiNumbers.find(number => number.IMEI === this.config.imei)
             : imeiNumbers[0];
         if (imeiUserNumber === undefined) {
-            this.logger.error(`[RControl] Configured IMEI "${this.config.imei}" was not found on this account.`);
+            this.logger.error(`[M2M] Configured IMEI "${this.config.imei}" was not found on this account.`);
             return;
         }
 
@@ -125,7 +125,7 @@ export class RControlPlatform implements DynamicPlatformPlugin {
             this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
         }
 
-        new SecuritySystemAccessory(accessory, this.logger, this.config, this.hap, this.rcontrolApi);
+        new SecuritySystemAccessory(accessory, this.logger, this.config, this.hap, this.m2mApi);
     }
 
     // Matches the same partitionNumber config field the panel accessory uses. Partitions must be
@@ -137,21 +137,21 @@ export class RControlPlatform implements DynamicPlatformPlugin {
     }
 
     private async discoverAndRegisterZones(imei: string, userId: string) {
-        const response = await this.rcontrolApi.getAllDeviceData({
+        const response = await this.m2mApi.getAllDeviceData({
             'IMEI': imei,
             'ProtocolNumber': 5,
             'ReturnCamerasData': false,
             'UserID': userId
         });
         if (response === undefined) {
-            this.logger.error('[RControl] Failed to discover zones: no response from the panel.');
+            this.logger.error('[M2M] Failed to discover zones: no response from the panel.');
             return;
         }
 
         const partitionNumber = this.zonePartitionNumber();
         const partition = response.AlarmControlSettingsV2Response.ExternalDevices.find(device => device.PartitionNumber === partitionNumber);
         if (partition === undefined) {
-            this.logger.error(`[RControl] Failed to discover zones: no partition numbered "${partitionNumber}" found.`);
+            this.logger.error(`[M2M] Failed to discover zones: no partition numbered "${partitionNumber}" found.`);
             return;
         }
 
@@ -179,7 +179,7 @@ export class RControlPlatform implements DynamicPlatformPlugin {
             this.zoneAccessories.set(zone.ZoneID, new ZoneAccessory(accessory, this.hap, this.logger, serviceType, displayName, zone.ZoneState));
         }
 
-        this.logger.info(`[RControl] Discovered ${this.zoneAccessories.size} zone(s) on partition ${partitionNumber}.`);
+        this.logger.info(`[M2M] Discovered ${this.zoneAccessories.size} zone(s) on partition ${partitionNumber}.`);
     }
 
     // Same reasoning as didFinishLaunching: this runs off a setInterval timer, so a thrown/rejected
@@ -188,14 +188,14 @@ export class RControlPlatform implements DynamicPlatformPlugin {
         try {
             await this.pollZoneStatesUnsafe();
         } catch (error) {
-            this.logger.error(`[RControl] Unexpected error while polling zone states: ${error}`);
+            this.logger.error(`[M2M] Unexpected error while polling zone states: ${error}`);
         }
     }
 
     private pollZoneStatesUnsafe = async () => {
         if (this.zoneImei === undefined || this.zoneUserId === undefined || this.zoneSerialNumber === undefined) return;
 
-        const response = await this.rcontrolApi.getDeviceStatusData({
+        const response = await this.m2mApi.getDeviceStatusData({
             'BypassingZones': true,
             'IMEI': this.zoneImei,
             'LoadLastSnapshots': false,

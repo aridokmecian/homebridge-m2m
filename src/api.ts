@@ -3,12 +3,12 @@ import fetch, { Headers } from "node-fetch";
 import { API_URL, AUTH_TOKEN_HEADER_NAME } from "./settings";
 import { CreateAuthCodePostResponse, CreateAccessTokenPostResponse, GetUserSettingsPostResponse, GetAllDeviceDataPostResponse, GetDeviceStatusDataPostResponse, UpdateArmStatusPostResponse } from "./types";
 
-// RControl's server can take 15-40s to confirm an arm/disarm with the panel over its cellular
+// The M2M server can take 15-40s to confirm an arm/disarm with the panel over its cellular
 // connection, but it occasionally drops the connection without ever responding. node-fetch has
 // no default timeout, so without this an arm/disarm request can hang indefinitely.
 const REQUEST_TIMEOUT_MS = 60000;
 
-export class RControlAPI {
+export class M2MAPI {
     private logger: Logging;
     private headers: Headers;
     private cachedUserSettings: GetUserSettingsPostResponse | undefined;
@@ -40,29 +40,29 @@ export class RControlAPI {
     // non-JSON responses) are always logged at error level - the API otherwise fails silently.
     private request = async <T>(label: string, url: string, body: Record<string, unknown>): Promise<T | undefined> => {
         const loggableBody = 'UserPass' in body ? { ...body, UserPass: '***' } : body;
-        this.logger.debug(`[RControl] ${label} request: ${url} ${JSON.stringify(loggableBody)}`);
+        this.logger.debug(`[M2M] ${label} request: ${url} ${JSON.stringify(loggableBody)}`);
         try {
             const response = await this.fetchWithTimeout(url, body);
             const text = await response.text();
-            this.logger.debug(`[RControl] ${label} response (${response.status}): ${text}`);
+            this.logger.debug(`[M2M] ${label} response (${response.status}): ${text}`);
             if (!response.ok) {
-                this.logger.error(`[RControl] ${label} failed with HTTP ${response.status} ${response.statusText}.`);
+                this.logger.error(`[M2M] ${label} failed with HTTP ${response.status} ${response.statusText}.`);
             }
             const parsed = JSON.parse(text);
             if (parsed && typeof parsed === 'object' && parsed.Success === false) {
                 const errorMessage = parsed.ErrorMsg ?? parsed.ErrorString ?? 'no error message provided';
-                this.logger.error(`[RControl] ${label} was rejected: ErrorCode ${parsed.ErrorCode}, "${errorMessage}".`);
+                this.logger.error(`[M2M] ${label} was rejected: ErrorCode ${parsed.ErrorCode}, "${errorMessage}".`);
             }
             return parsed as T;
         } catch (error) {
-            this.logger.error(`[RControl] ${label} request failed. Error: ${error}`);
+            this.logger.error(`[M2M] ${label} request failed. Error: ${error}`);
             return undefined;
         }
     }
 
     private ensureLoggedIn = (label: string): boolean => {
         if (!this.isLoggedIn()) {
-            this.logger.error(`[RControl] Cannot call ${label}: not logged in to RControl yet.`);
+            this.logger.error(`[M2M] Cannot call ${label}: not logged in to M2M yet.`);
             return false;
         }
         return true;
@@ -72,19 +72,19 @@ export class RControlAPI {
         const createAuthCodeResponse = await this.createAuthCode(username, password);
         const authCode = createAuthCodeResponse?.AuthCode;
         if (!authCode) {
-            this.logger.error('[RControl] Login failed: no authorization code returned.');
+            this.logger.error('[M2M] Login failed: no authorization code returned.');
             return;
         }
 
         const createAccessTokenResponse = await this.createAccessToken(authCode);
         const accessToken = createAccessTokenResponse?.AccessToken;
         if (!accessToken) {
-            this.logger.error('[RControl] Login failed: no access token returned.');
+            this.logger.error('[M2M] Login failed: no access token returned.');
             return;
         }
 
         this.headers.set(AUTH_TOKEN_HEADER_NAME, accessToken);
-        this.logger.debug('[RControl] Login succeeded.');
+        this.logger.debug('[M2M] Login succeeded.');
 
         // v3's getalldevicedata and getdevicestatusdata both require UserID, which only
         // gethausersettings provides - fetch and cache it now so every caller can reuse it.
