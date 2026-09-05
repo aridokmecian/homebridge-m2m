@@ -35,8 +35,9 @@ export class RControlAPI {
     }
 
     // Centralizes request/response logging for every call. Request/response bodies are logged at
-    // debug level (enable Homebridge's debug mode to see them); HTTP failures and thrown errors
-    // (timeouts, aborts, non-JSON responses) are always logged at error level.
+    // debug level (enable Homebridge's debug mode to see them); HTTP failures, application-level
+    // failures (HTTP 200 with Success: false in the body), and thrown errors (timeouts, aborts,
+    // non-JSON responses) are always logged at error level - the API otherwise fails silently.
     private request = async <T>(label: string, url: string, body: Record<string, unknown>): Promise<T | undefined> => {
         const loggableBody = 'UserPass' in body ? { ...body, UserPass: '***' } : body;
         this.logger.debug(`[RControl] ${label} request: ${url} ${JSON.stringify(loggableBody)}`);
@@ -47,7 +48,12 @@ export class RControlAPI {
             if (!response.ok) {
                 this.logger.error(`[RControl] ${label} failed with HTTP ${response.status} ${response.statusText}.`);
             }
-            return JSON.parse(text) as T;
+            const parsed = JSON.parse(text);
+            if (parsed && typeof parsed === 'object' && parsed.Success === false) {
+                const errorMessage = parsed.ErrorMsg ?? parsed.ErrorString ?? 'no error message provided';
+                this.logger.error(`[RControl] ${label} was rejected: ErrorCode ${parsed.ErrorCode}, "${errorMessage}".`);
+            }
+            return parsed as T;
         } catch (error) {
             this.logger.error(`[RControl] ${label} request failed. Error: ${error}`);
             return undefined;
@@ -66,14 +72,14 @@ export class RControlAPI {
         const createAuthCodeResponse = await this.createAuthCode(username, password);
         const authCode = createAuthCodeResponse?.AuthCode;
         if (!authCode) {
-            this.logger.error(`[RControl] Login failed: no authorization code returned. Response: ${JSON.stringify(createAuthCodeResponse)}`);
+            this.logger.error('[RControl] Login failed: no authorization code returned.');
             return;
         }
 
         const createAccessTokenResponse = await this.createAccessToken(authCode);
         const accessToken = createAccessTokenResponse?.AccessToken;
         if (!accessToken) {
-            this.logger.error(`[RControl] Login failed: no access token returned. Response: ${JSON.stringify(createAccessTokenResponse)}`);
+            this.logger.error('[RControl] Login failed: no access token returned.');
             return;
         }
 

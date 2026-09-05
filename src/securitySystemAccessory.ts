@@ -237,9 +237,6 @@ export class SecuritySystemAccessory {
             if (response?.ErrorCode !== NOT_CONFIRMED_ERROR_CODE) break;
             this.logger.warn(`RControl did not confirm the arming state change (attempt ${attempt}/${MAX_ATTEMPTS}).` + (attempt < MAX_ATTEMPTS ? ' Retrying...' : ''));
         }
-        if (response !== undefined && response.ErrorCode !== 0) {
-            this.logger.error(`[RControl] remotearm was rejected: ErrorCode ${response.ErrorCode}, ErrorString: "${response.ErrorString}".`);
-        }
         return response;
     }
 
