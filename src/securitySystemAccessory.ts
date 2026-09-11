@@ -257,7 +257,14 @@ export class SecuritySystemAccessory {
             this.lastDeviceDataResponse = deviceDataResponse;
         }
         const externalDevice = deviceDataResponse !== undefined ? this.selectExternalDevice(deviceDataResponse) : undefined;
-        return externalDevice !== undefined ? this.deviceStateToHapState(externalDevice.DeviceState) : undefined;
+        if (externalDevice === undefined || externalDevice.DeviceState === null || externalDevice.DeviceState === undefined) {
+            // A missing/null DeviceState most likely means a malformed or partial response (e.g.
+            // during one of M2M's occasional flaky spells) rather than a genuine status - skip
+            // this tick and keep reporting whatever was last actually confirmed, rather than
+            // guess at a state (Disarmed or otherwise) we don't actually know.
+            return undefined;
+        }
+        return this.deviceStateToHapState(externalDevice.DeviceState);
     }
 
     updateAlarmState = async (newState: ServerAlarmState) => {
