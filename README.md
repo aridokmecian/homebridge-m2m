@@ -13,6 +13,7 @@ This is a fork of [homebridge-rcontrol](https://github.com/aabosh/homebridge-rco
 - Pick which panel to control from a live dropdown in the plugin's Settings UI, populated from your actual account — no need to look up an IMEI by hand
 - Optionally expose each alarm zone (doors, windows, motion) as its own HomeKit contact/motion sensor
 - Support for accounts with multiple panels or partitions: add multiple platform entries and point each one at a specific panel/partition (see Notes)
+- Arm/disarm state stays in sync with the panel even when changed outside of HomeKit (keypad, the native app), via periodic background polling
 - Fast, responsive status updates in the Home app
 - Debug logging for troubleshooting
 - Built for Homebridge v2 and modern Node.js
@@ -40,9 +41,9 @@ homebridge-m2m is a Homebridge **platform**, configured under `platforms` in `co
 
 > **Upgrading from an earlier version?** homebridge-m2m used to be a Homebridge **accessory**, configured under `accessories`. Move your existing block from `accessories` to `platforms` and rename its `accessory` field to `platform` (same field values otherwise). This is a one-time breaking change — see Notes for what else it affects.
 
-Set `enableZoneSensors: true` to also register a contact or motion sensor for each zone on the panel, polled for state changes every 10 seconds by default (configurable under Advanced Settings). Zone names and sensor types (contact vs. motion) are auto-discovered from the panel; no per-zone configuration is needed.
+The alarm's arm/disarm state is checked every 10 seconds by default (configurable under Advanced Settings), regardless of `enableZoneSensors`. Set `enableZoneSensors: true` to also register a contact or motion sensor for each zone on the panel, polled on that same interval. Zone names and sensor types (contact vs. motion) are auto-discovered from the panel; no per-zone configuration is needed.
 
-The Config UI's settings form for this plugin includes a **Panel** dropdown: with a username and password entered, click **Fetch Panels** to log in and list the actual panels on your account (labeled with whatever name your account has for them, e.g. an address) instead of typing in an IMEI. Partition number and the zone polling interval live under an **Advanced Settings** section, collapsed by default — most users won't need to touch them.
+The Config UI's settings form for this plugin includes a **Panel** dropdown: with a username and password entered, click **Fetch Panels** to log in and list the actual panels on your account (labeled with whatever name your account has for them, e.g. an address) instead of typing in an IMEI. Partition number and the polling interval live under an **Advanced Settings** section, collapsed by default — most users won't need to touch them.
 
 ## Notes
 - Migrating from the old accessory-based config gives your panel a new HomeKit accessory identity (Homebridge platforms manage their own accessory IDs, separate from the old accessory-plugin ones) — you'll need to re-add it to any HomeKit rooms, scenes, or automations that referenced the old one.

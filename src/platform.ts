@@ -7,10 +7,11 @@ import { ZoneAccessory } from "./zoneAccessory";
 import { normalizeZoneName, zoneServiceTypeForName } from "./zoneNaming";
 
 // The native app polls zone status roughly every 7s; 10s is safe and polite, and is the default
-// exposed via the pollingIntervalSeconds config option.
-const DEFAULT_ZONE_POLL_INTERVAL_SECONDS = 10;
+// exposed via the pollingIntervalSeconds config option. Also governs how often the alarm's own
+// arm/disarm state is refreshed in the background.
+const DEFAULT_POLL_INTERVAL_SECONDS = 10;
 // Matches the schema's minimum, enforced again here in case config.json was hand-edited past it.
-const MIN_ZONE_POLL_INTERVAL_SECONDS = 5;
+const MIN_POLL_INTERVAL_SECONDS = 5;
 
 export class M2MPlatform implements DynamicPlatformPlugin {
 
@@ -26,10 +27,13 @@ export class M2MPlatform implements DynamicPlatformPlugin {
     private readonly cachedAccessories = new Map<string, PlatformAccessory>();
     private readonly zoneAccessories = new Map<string, ZoneAccessory>();
 
+    private securitySystemAccessory: SecuritySystemAccessory | undefined = undefined;
+
     private zoneImei: string | undefined = undefined;
     private zoneUserId: string | undefined = undefined;
     private zoneSerialNumber: string | undefined = undefined;
     private zonePollInterval: ReturnType<typeof setInterval> | undefined = undefined;
+    private alarmPollInterval: ReturnType<typeof setInterval> | undefined = undefined;
 
     constructor(logger: Logging, config: PlatformConfig, api: API) {
         this.logger = logger;
@@ -77,6 +81,11 @@ export class M2MPlatform implements DynamicPlatformPlugin {
         await this.m2mApi.login(this.config.username, this.config.password);
         this.registerSecuritySystemAccessory();
 
+        // Keeps the arm/disarm state in sync when the panel is armed/disarmed outside of
+        // HomeKit (keypad, the native app, etc.) - otherwise it's only ever refreshed when
+        // HomeKit happens to ask, or after this plugin itself issues a command.
+        this.alarmPollInterval = setInterval(() => this.pollAlarmState(), this.pollIntervalMs());
+
         if (this.config.enableZoneSensors) {
             await this.setUpZoneSensors();
         }
@@ -108,8 +117,12 @@ export class M2MPlatform implements DynamicPlatformPlugin {
 
         await this.discoverAndRegisterZones(imeiUserNumber.IMEI, userSettings.HAUserSettings.ID);
 
-        const intervalSeconds = Math.max(MIN_ZONE_POLL_INTERVAL_SECONDS, this.config.pollingIntervalSeconds || DEFAULT_ZONE_POLL_INTERVAL_SECONDS);
-        this.zonePollInterval = setInterval(() => this.pollZoneStates(), intervalSeconds * 1000);
+        this.zonePollInterval = setInterval(() => this.pollZoneStates(), this.pollIntervalMs());
+    }
+
+    private pollIntervalMs(): number {
+        const intervalSeconds = Math.max(MIN_POLL_INTERVAL_SECONDS, this.config.pollingIntervalSeconds || DEFAULT_POLL_INTERVAL_SECONDS);
+        return intervalSeconds * 1000;
     }
 
     private registerSecuritySystemAccessory() {
@@ -125,7 +138,17 @@ export class M2MPlatform implements DynamicPlatformPlugin {
             this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
         }
 
-        new SecuritySystemAccessory(accessory, this.logger, this.config, this.hap, this.m2mApi);
+        this.securitySystemAccessory = new SecuritySystemAccessory(accessory, this.logger, this.config, this.hap, this.m2mApi);
+    }
+
+    // Same reasoning as pollZoneStates: this runs off a setInterval timer with no caller to
+    // catch a rejection, so an unexpected error here must not crash the process.
+    private pollAlarmState = async () => {
+        try {
+            await this.securitySystemAccessory?.refreshAlarmState();
+        } catch (error) {
+            this.logger.error(`[M2M] Unexpected error while polling alarm state: ${error}`);
+        }
     }
 
     // Matches the same partitionNumber config field the panel accessory uses. Partitions must be
@@ -220,6 +243,9 @@ export class M2MPlatform implements DynamicPlatformPlugin {
     private shutdown() {
         if (this.zonePollInterval !== undefined) {
             clearInterval(this.zonePollInterval);
+        }
+        if (this.alarmPollInterval !== undefined) {
+            clearInterval(this.alarmPollInterval);
         }
     }
 

@@ -38,11 +38,11 @@
                 "description": "If your panel has more than one partition, the partition this accessory should control. Leave blank to use the first partition on the panel."
             },
             "pollingIntervalSeconds": {
-                "title": "Zone Polling Interval (seconds)",
+                "title": "Polling Interval (seconds)",
                 "type": "integer",
                 "default": 10,
                 "minimum": 5,
-                "description": "How often to check for zone state changes when zone sensors are enabled."
+                "description": "How often to check for arm/disarm state changes, and for zone state changes when zone sensors are enabled."
             }
         },
         "required": [
