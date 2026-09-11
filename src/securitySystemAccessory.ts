@@ -257,11 +257,15 @@ export class SecuritySystemAccessory {
             this.lastDeviceDataResponse = deviceDataResponse;
         }
         const externalDevice = deviceDataResponse !== undefined ? this.selectExternalDevice(deviceDataResponse) : undefined;
-        if (externalDevice === undefined || externalDevice.DeviceState === null || externalDevice.DeviceState === undefined) {
-            // A missing/null DeviceState most likely means a malformed or partial response (e.g.
-            // during one of M2M's occasional flaky spells) rather than a genuine status - skip
-            // this tick and keep reporting whatever was last actually confirmed, rather than
-            // guess at a state (Disarmed or otherwise) we don't actually know.
+        if (externalDevice === undefined || externalDevice.DeviceState === null || externalDevice.DeviceState === undefined
+            || (externalDevice.DeviceState as number) === 0) {
+            // A missing/null DeviceState, or a value of 0, most likely means a malformed/partial
+            // response or "no confirmed reading yet" rather than a genuine status - confirmed via
+            // a live capture: 0 briefly appeared across several consecutive polls during one of
+            // M2M's flaky spells, then cleared back to the correct value on its own a few seconds
+            // later. Skip the tick and keep reporting whatever was last actually confirmed, rather
+            // than guess at a state (Disarmed, or - with assumeUnknownStateIsTriggered - Triggered)
+            // we don't actually know.
             return undefined;
         }
         return this.deviceStateToHapState(externalDevice.DeviceState);
