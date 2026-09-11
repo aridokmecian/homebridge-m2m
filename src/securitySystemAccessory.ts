@@ -74,15 +74,24 @@ export class SecuritySystemAccessory {
             callback(null, this.targetState);
             return;
         }
+        // this.targetState is only ever left unset when the current state is (or was, the one
+        // time it's checked) triggered - which has no valid TargetState value of its own. Falls
+        // back to Away since the panel must be armed for it to have triggered at all.
         if (this.lastKnownState !== undefined) {
-            this.targetState = this.lastKnownState;
-            callback(null, this.lastKnownState);
+            const fallback = this.lastKnownState !== this.hap.Characteristic.SecuritySystemCurrentState.ALARM_TRIGGERED
+                ? this.lastKnownState
+                : this.hap.Characteristic.SecuritySystemTargetState.AWAY_ARM;
+            this.targetState = fallback;
+            callback(null, fallback);
             return;
         }
         this.refreshAlarmState()
             .then(state => {
                 if (state === undefined) {
                     callback(new Error('Failed to fetch current alarm state from M2M.'));
+                } else if (state === this.hap.Characteristic.SecuritySystemCurrentState.ALARM_TRIGGERED) {
+                    this.targetState = this.hap.Characteristic.SecuritySystemTargetState.AWAY_ARM;
+                    callback(null, this.targetState);
                 } else {
                     callback(null, state);
                 }
@@ -166,9 +175,14 @@ export class SecuritySystemAccessory {
                     this.logger.info(`[M2M] Current state changed: ${this.hapStateLabel(this.lastKnownState)} -> ${this.hapStateLabel(state)}`);
                 }
                 this.lastKnownState = state;
-                this.targetState = state;
                 this.service.getCharacteristic(this.hap.Characteristic.SecuritySystemCurrentState).updateValue(state);
-                this.service.getCharacteristic(this.hap.Characteristic.SecuritySystemTargetState).updateValue(state);
+                // SecuritySystemTargetState has no "triggered" value (you can't target triggered,
+                // only observe it) - leave the target as whatever it was (presumably still armed)
+                // rather than push an invalid value to that characteristic.
+                if (state !== this.hap.Characteristic.SecuritySystemCurrentState.ALARM_TRIGGERED) {
+                    this.targetState = state;
+                    this.service.getCharacteristic(this.hap.Characteristic.SecuritySystemTargetState).updateValue(state);
+                }
             }
             return state;
         });
@@ -180,6 +194,7 @@ export class SecuritySystemAccessory {
             case this.hap.Characteristic.SecuritySystemTargetState.AWAY_ARM: return 'Away';
             case this.hap.Characteristic.SecuritySystemTargetState.NIGHT_ARM: return 'Night';
             case this.hap.Characteristic.SecuritySystemTargetState.DISARM: return 'Disarmed';
+            case this.hap.Characteristic.SecuritySystemCurrentState.ALARM_TRIGGERED: return 'Triggered';
             case undefined: return 'unknown';
             default: return `unknown(${state})`;
         }
@@ -290,8 +305,17 @@ export class SecuritySystemAccessory {
                 return this.hap.Characteristic.SecuritySystemTargetState.AWAY_ARM;
             case DeviceState.STAY_ARMED:
                 return this.stayArmSubMode;
-            default:
+            case DeviceState.DISARMED:
                 return this.hap.Characteristic.SecuritySystemTargetState.DISARM;
+            default:
+                // M2M's only confirmed DeviceState codes are AWAY_ARMED/DISARMED/STAY_ARMED
+                // (1/2/3); there's no confirmed code for an actively triggered/sounding alarm.
+                // assumeUnknownStateIsTriggered is an opt-in, off-by-default guess that treats
+                // any unrecognized code as triggered rather than the default (Disarmed) - not
+                // enabled for everyone since it's unconfirmed against the real API.
+                return this.config.assumeUnknownStateIsTriggered
+                    ? this.hap.Characteristic.SecuritySystemCurrentState.ALARM_TRIGGERED
+                    : this.hap.Characteristic.SecuritySystemTargetState.DISARM;
         }
     }
 

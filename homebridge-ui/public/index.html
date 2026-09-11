@@ -64,7 +64,7 @@
     <div class="form-check mb-3">
         <input type="checkbox" class="form-check-input" id="enableZoneSensors">
         <label class="form-check-label" for="enableZoneSensors">Enable Zone Sensors</label>
-        <small class="form-text text-muted">Register each alarm zone as a HomeKit contact/motion sensor.</small>
+        <small class="form-text text-muted d-block">Register each alarm zone as a HomeKit contact/motion sensor.</small>
     </div>
 
     <div class="form-group">
@@ -88,10 +88,16 @@
                 <small class="form-text text-muted">If your panel has more than one partition, the partition this accessory should control. Leave blank to use the first partition on the panel.</small>
             </div>
 
-            <div class="form-group mb-0">
+            <div class="form-group">
                 <label for="pollingIntervalSeconds">Polling Interval (seconds)</label>
                 <input type="number" class="form-control" id="pollingIntervalSeconds" min="5" step="1">
                 <small class="form-text text-muted">How often to check for arm/disarm state changes, and for zone state changes when zone sensors are enabled.</small>
+            </div>
+
+            <div class="form-check mb-0">
+                <input type="checkbox" class="form-check-input" id="assumeUnknownStateIsTriggered">
+                <label class="form-check-label" for="assumeUnknownStateIsTriggered">Assume Unknown State Is Triggered (experimental)</label>
+                <small class="form-text text-muted d-block">M2M has no confirmed status code for an actively triggered/sounding alarm. When enabled, any unrecognized status is reported to HomeKit as triggered instead of disarmed - this is an educated guess, not a confirmed API behavior, so it's off by default.</small>
             </div>
         </div>
     </details>
@@ -110,6 +116,7 @@
         panelStatus: document.getElementById('panelStatus'),
         partitionNumber: document.getElementById('partitionNumber'),
         pollingIntervalSeconds: document.getElementById('pollingIntervalSeconds'),
+        assumeUnknownStateIsTriggered: document.getElementById('assumeUnknownStateIsTriggered'),
         advancedSettings: document.getElementById('advancedSettings'),
     };
 
@@ -156,6 +163,7 @@
     els.enableZoneSensors.checked = !!config.enableZoneSensors;
     els.partitionNumber.value = config.partitionNumber || '';
     els.pollingIntervalSeconds.value = config.pollingIntervalSeconds || '';
+    els.assumeUnknownStateIsTriggered.checked = !!config.assumeUnknownStateIsTriggered;
     if (config.imei) {
         const opt = document.createElement('option');
         opt.value = config.imei;
@@ -178,6 +186,10 @@
     els.pollingIntervalSeconds.addEventListener('input', () => {
         const value = Number.parseInt(els.pollingIntervalSeconds.value, 10);
         config.pollingIntervalSeconds = Number.isFinite(value) ? value : undefined;
+        persist();
+    });
+    els.assumeUnknownStateIsTriggered.addEventListener('change', () => {
+        config.assumeUnknownStateIsTriggered = els.assumeUnknownStateIsTriggered.checked;
         persist();
     });
     els.panel.addEventListener('change', () => {

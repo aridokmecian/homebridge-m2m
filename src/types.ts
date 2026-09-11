@@ -5,7 +5,11 @@ export interface Options {
     imei?: string,
     partitionNumber?: string,
     enableZoneSensors?: boolean,
-    pollingIntervalSeconds?: number
+    pollingIntervalSeconds?: number,
+    // M2M has no confirmed DeviceState code for an actively triggered/sounding alarm; this treats
+    // any unrecognized code as triggered instead of the default (Disarmed). Opt-in and off by
+    // default since it's an educated guess, not a confirmed API behavior - see securitySystemAccessory.ts.
+    assumeUnknownStateIsTriggered?: boolean
 }
 
 export interface CreateAuthCodePostResponse {

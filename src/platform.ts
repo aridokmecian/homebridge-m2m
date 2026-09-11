@@ -48,7 +48,8 @@ export class M2MPlatform implements DynamicPlatformPlugin {
             imei: config.imei as string | undefined,
             partitionNumber: config.partitionNumber as string | undefined,
             enableZoneSensors: config.enableZoneSensors as boolean | undefined,
-            pollingIntervalSeconds: config.pollingIntervalSeconds as number | undefined
+            pollingIntervalSeconds: config.pollingIntervalSeconds as number | undefined,
+            assumeUnknownStateIsTriggered: config.assumeUnknownStateIsTriggered as boolean | undefined
         };
 
         this.api.on('didFinishLaunching', () => this.didFinishLaunching());

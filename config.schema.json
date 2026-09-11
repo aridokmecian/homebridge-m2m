@@ -43,6 +43,12 @@
                 "default": 10,
                 "minimum": 5,
                 "description": "How often to check for arm/disarm state changes, and for zone state changes when zone sensors are enabled."
+            },
+            "assumeUnknownStateIsTriggered": {
+                "title": "Assume Unknown State Is Triggered (experimental)",
+                "type": "boolean",
+                "default": false,
+                "description": "M2M has no confirmed status code for an actively triggered/sounding alarm. When enabled, any unrecognized status is reported to HomeKit as triggered instead of disarmed - this is an educated guess, not a confirmed API behavior, so it's off by default."
             }
         },
         "required": [
@@ -64,7 +70,8 @@
             "items": [
                 "imei",
                 "partitionNumber",
-                "pollingIntervalSeconds"
+                "pollingIntervalSeconds",
+                "assumeUnknownStateIsTriggered"
             ]
         }
     ],

@@ -51,6 +51,7 @@ The Config UI's settings form for this plugin includes a **Panel** dropdown: wit
 - If you configure more than one platform entry (for a multi-panel/multi-partition account), only the first one is editable through the Settings UI described above — add or edit additional entries via the raw JSON config editor instead.
 - Home and Night both arm the panel in the same "stay" mode, since the panel itself doesn't distinguish between them; Away arms separately. The plugin remembers which of the two you last set so it's reported back correctly (to the Home app and any automations) instead of always showing as Home.
 - Switching directly between Away and Home/Night from the Home app briefly disarms the panel before re-arming into the requested mode, since M2M's API doesn't support switching between armed modes directly.
+- M2M has no confirmed status code for an actively triggered/sounding alarm, so this isn't reported to HomeKit by default. The experimental **Assume Unknown State Is Triggered** option (under Advanced Settings) treats any unrecognized status as triggered instead of disarmed - it's an educated guess, not a confirmed API behavior, so it's off by default and could misfire on some other unrecognized (but non-alarm) status.
 - Due to limited testing and the usage of M2M's undocumented and private API, this is unstable and may cease to work in the future. 
 
 ## Releasing
