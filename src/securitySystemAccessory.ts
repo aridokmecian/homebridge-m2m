@@ -20,6 +20,11 @@ export class SecuritySystemAccessory {
     // on its own, so deviceStateToHapState falls back to whichever of the two was last actually
     // requested, rather than always collapsing back to Home. Defaults to Home.
     private stayArmSubMode: CharacteristicValue;
+    // Arm/disarm commands can take 15-40s to confirm, which can span multiple background poll
+    // ticks (every 10s by default) - while one is in flight, refreshAlarmState skips background
+    // polls so they don't push a stale mid-sequence state (e.g. briefly disarmed, between the
+    // "disarm first" and re-arm steps of a mode switch) over the command that's still running.
+    private commandInFlight = false;
 
     constructor(accessory: PlatformAccessory, logger: Logging, config: Options, hap: HAP, m2mApi: M2MAPI) {
         this.logger = logger;
@@ -45,7 +50,9 @@ export class SecuritySystemAccessory {
         // last known state when we have one, and refresh it in the background instead.
         if (this.lastKnownState !== undefined) {
             callback(null, this.lastKnownState);
-            this.refreshAlarmState();
+            this.refreshAlarmState().catch(error => {
+                this.logger.error(`[M2M] Unexpected error while refreshing current alarm state in the background: ${error}`);
+            });
             return;
         }
         this.refreshAlarmState()
@@ -116,6 +123,7 @@ export class SecuritySystemAccessory {
             && targetServerState !== ServerAlarmState.DISARMED
             && previousServerState !== targetServerState;
 
+        this.commandInFlight = true;
         let armSequence;
         if (needsDisarmFirst) {
             this.logger.info(`[M2M] Disarming before switching from ${this.hapStateLabel(this.targetState)} to ${this.hapStateLabel(value)}...`);
@@ -132,9 +140,13 @@ export class SecuritySystemAccessory {
         }
 
         armSequence
-            .then(() => this.refreshAlarmState())
+            .then(() => {
+                this.commandInFlight = false;
+                return this.refreshAlarmState();
+            })
             .then(() => callback())
             .catch(error => {
+                this.commandInFlight = false;
                 this.logger.error(`[M2M] Unexpected error while changing the arming state: ${error}`);
                 callback(error instanceof Error ? error : new Error(String(error)));
             });
@@ -142,7 +154,12 @@ export class SecuritySystemAccessory {
 
     // Fetches the current alarm state, caches it, and pushes it to the CurrentState/TargetState
     // characteristics so HomeKit picks it up even when nothing was actively waiting on this call.
+    // Skips while a command is in flight (see commandInFlight) so a background poll can't push a
+    // stale mid-sequence state over a command that's still running.
     refreshAlarmState = (): Promise<CharacteristicValue | undefined> => {
+        if (this.commandInFlight) {
+            return Promise.resolve(this.lastKnownState);
+        }
         return this.getCurrentAlarmState().then(state => {
             if (state !== undefined) {
                 if (state !== this.lastKnownState) {
@@ -151,6 +168,7 @@ export class SecuritySystemAccessory {
                 this.lastKnownState = state;
                 this.targetState = state;
                 this.service.getCharacteristic(this.hap.Characteristic.SecuritySystemCurrentState).updateValue(state);
+                this.service.getCharacteristic(this.hap.Characteristic.SecuritySystemTargetState).updateValue(state);
             }
             return state;
         });
